@@ -76,34 +76,55 @@ export default function CreateReceipt() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [user, setUser] = useState<any>(null)
 
-  // Generate receipt number on component mount
+  // Authentication and initialization
   useEffect(() => {
-    const generateReceiptNumber = async () => {
-      try {
-        const currentYear = new Date().getFullYear()
-        const response = await fetch(`/api/receipts/last-number?year=${currentYear}`)
-        
-        if (!response.ok) throw new Error('Failed to fetch last receipt number')
-        
-        const data = await response.json()
-        const count = data.lastNumber + 1
-
-        // Simple receipt number format: REC-0001
-        const receiptNumber = `REC-${count.toString().padStart(4, "0")}`
-        setReceiptData(prev => ({ ...prev, receiptNumber }))
-      } catch (error) {
-        console.error('Error generating receipt number:', error)
-        // Fallback to local timestamp
-        const timestamp = Date.now().toString().slice(-4)
-        setReceiptData(prev => ({ ...prev, receiptNumber: `REC-${timestamp}` }))
-      } finally {
-        setIsLoading(false)
+    const initialize = async () => {
+      const userJSON = localStorage.getItem("currentUser")
+      if (!userJSON) {
+        router.push("/login")
+        return
       }
+
+      const userData = JSON.parse(userJSON)
+
+      // Check if profile is complete
+      if (!userData.profileComplete) {
+        router.push("/profile?from=/receipts/create")
+        return
+      }
+
+      setUser(userData)
+      await generateReceiptNumber(userData.token)
     }
 
-    generateReceiptNumber()
-  }, [])
+    initialize()
+  }, [router])
+
+  const generateReceiptNumber = async (token: string) => {
+    try {
+      const currentYear = new Date().getFullYear()
+      const response = await fetch(`/api/receipts/last-number?year=${currentYear}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      
+      if (!response.ok) throw new Error('Failed to fetch last receipt number')
+      
+      const data = await response.json()
+      const count = data.lastNumber + 1
+
+      const receiptNumber = `REC-${count.toString().padStart(4, "0")}`
+      setReceiptData(prev => ({ ...prev, receiptNumber }))
+    } catch (error) {
+      console.error('Error generating receipt number:', error)
+      // Fallback to local timestamp
+      const timestamp = Date.now().toString().slice(-4)
+      setReceiptData(prev => ({ ...prev, receiptNumber: `REC-${timestamp}` }))
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   // Calculate totals whenever items or payment status changes
   useEffect(() => {
@@ -170,13 +191,19 @@ export default function CreateReceipt() {
   }
 
   const handleCardNumberChange = (value: string) => {
-    // Format as XXXX XXXX XXXX XXXX
     const formatted = value.replace(/\D/g, "").replace(/(\d{4})(?=\d)/g, "$1 ").trim()
     setPaymentDetails(prev => ({ ...prev, cardNumber: formatted }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Additional auth check
+    if (!user) {
+      router.push("/login")
+      return
+    }
+
     setIsSubmitting(true)
     setErrors({})
 
@@ -224,15 +251,11 @@ export default function CreateReceipt() {
         paymentDetails: Object.keys(paymentDetails).length > 0 ? paymentDetails : undefined
       }
 
-      // Get JWT token from localStorage
-      const token = localStorage.getItem("token")
-      if (!token) throw new Error("Authentication required")
-
       const response = await fetch('/api/receipts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${user.token}`
         },
         body: JSON.stringify(requestBody)
       })
