@@ -1,8 +1,7 @@
+// app/profile/page.tsx
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -30,9 +29,8 @@ interface UserProfile {
   storeAddress?: string
   storeContact?: string
   storeCountryCode?: string
-  profileComplete?: boolean
-  emailVerified?: boolean
   profilePhoto?: string
+  emailVerified?: boolean
 }
 
 export default function ProfilePage() {
@@ -53,6 +51,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(false)
   const [showProfileAlert, setShowProfileAlert] = useState(false)
   const [redirectFrom, setRedirectFrom] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   // Email verification states
   const [emailOtp, setEmailOtp] = useState("")
@@ -62,18 +61,11 @@ export default function ProfilePage() {
 
   // Profile photo
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false)
 
-  useEffect(() => {
-    // Check if user is logged in
-    const userJSON = localStorage.getItem("currentUser")
-    if (!userJSON) {
-      router.push("/login")
-      return
-    }
-
-    const userData = JSON.parse(userJSON)
+  const setUserState = useCallback((userData: UserProfile) => {
     setUser(userData)
     setName(userData.name)
     setEmail(userData.email)
@@ -83,15 +75,59 @@ export default function ProfilePage() {
     setStoreCountryCode(userData.storeCountryCode || "+91")
     setEmailOtpVerified(userData.emailVerified || false)
     setProfilePhoto(userData.profilePhoto || null)
+  }, [])
 
-    // Check if redirected from another page
-    const urlParams = new URLSearchParams(window.location.search)
-    const from = urlParams.get("from")
-    if (from) {
-      setRedirectFrom(from)
-      setShowProfileAlert(true)
+  useEffect(() => {
+    let isMounted = true
+    
+    const fetchProfile = async () => {
+      try {
+        const userJSON = localStorage.getItem('currentUser')
+        if (!userJSON) {
+          router.push('/login')
+          return
+        }
+
+        const user = JSON.parse(userJSON)
+        const response = await fetch('/api/profile', {
+          headers: { Authorization: `Bearer ${user.token}` }
+        })
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch profile')
+        }
+        
+        const userData = await response.json()
+        
+        if (isMounted) {
+          setUserState(userData)
+
+          // Check if redirected from another page
+          const urlParams = new URLSearchParams(window.location.search)
+          const from = urlParams.get("from")
+          if (from) {
+            setRedirectFrom(from)
+            setShowProfileAlert(true)
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching profile:', error)
+        if (isMounted) {
+          router.push('/login')
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
     }
-  }, [router])
+    
+    fetchProfile()
+    
+    return () => {
+      isMounted = false
+    }
+  }, [router, setUserState])
 
   const validateContact = (contact: string): boolean => {
     if (!contact) {
@@ -123,7 +159,7 @@ export default function ProfilePage() {
     )
   }
 
-  const handleUpdateProfile = (e: React.FormEvent) => {
+  const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError("")
@@ -131,84 +167,67 @@ export default function ProfilePage() {
 
     if (!user) return
 
-    // Validate contact number
+    // Validate required fields
+    if (!name || !storeName || !storeAddress || !storeContact || !storeCountryCode) {
+      setError("Please fill in all required fields")
+      setLoading(false)
+      return
+    }
+
     if (!validateContact(storeContact)) {
       setLoading(false)
       return
     }
 
-    // Validate required fields
-    if (!name || !storeName || !storeAddress) {
-      setError("All fields are required to complete your profile")
+    try {
+      const userJSON = localStorage.getItem('currentUser')
+      if (!userJSON) {
+        router.push('/login')
+        return
+      }
+
+      const currentUser = JSON.parse(userJSON)
+      const formData = new FormData()
+      
+      // Add form fields
+      formData.append('name', name)
+      formData.append('storeName', storeName)
+      formData.append('storeAddress', storeAddress)
+      formData.append('storeContact', storeContact)
+      formData.append('storeCountryCode', storeCountryCode)
+      if (profilePhoto) {
+        formData.append('currentPhotoUrl', profilePhoto)
+      }
+      if (selectedFile) {
+        formData.append('profilePhoto', selectedFile)
+      }
+
+      const response = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 
+          Authorization: `Bearer ${currentUser.token}`
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to update profile')
+      }
+
+      const updatedProfile = await response.json()
+      setSuccess("Profile updated successfully")
+      setUserState(updatedProfile.updatedProfile)
+      setSelectedFile(null)
+    } catch (error: any) {
+      console.error('Update profile error:', error)
+      setError(error.message || 'Failed to update profile')
+    } finally {
       setLoading(false)
-      return
-    }
-
-    // Check if email is verified
-    if (!emailOtpVerified) {
-      setError("Please verify your email address")
-      setLoading(false)
-      return
-    }
-
-    // Check if profile is complete
-    const profileComplete = isProfileComplete()
-
-    // Update user profile
-    const updatedUser = {
-      ...user,
-      name,
-      email,
-      storeName,
-      storeAddress,
-      storeContact,
-      storeCountryCode,
-      profileComplete,
-      emailVerified: emailOtpVerified,
-      profilePhoto: profilePhoto,
-    }
-
-    // Get all users
-    const usersJSON = localStorage.getItem("users")
-    const users = usersJSON ? JSON.parse(usersJSON) : []
-
-    // Update user in the users array
-    const updatedUsers = users.map((u: any) =>
-      u.id === user.id
-        ? {
-            ...u,
-            name,
-            email,
-            storeName,
-            storeAddress,
-            storeContact,
-            storeCountryCode,
-            profileComplete,
-            emailVerified: emailOtpVerified,
-            profilePhoto: profilePhoto,
-          }
-        : u,
-    )
-
-    // Save updated users
-    localStorage.setItem("users", JSON.stringify(updatedUsers))
-
-    // Update current user
-    localStorage.setItem("currentUser", JSON.stringify(updatedUser))
-    setUser(updatedUser)
-
-    setSuccess("Profile updated successfully")
-    setLoading(false)
-
-    // Redirect back to the original page if profile is now complete
-    if (profileComplete && redirectFrom) {
-      setTimeout(() => {
-        router.push(redirectFrom)
-      }, 1500)
     }
   }
 
-  const handleUpdatePassword = (e: React.FormEvent) => {
+  const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError("")
@@ -236,65 +255,73 @@ export default function ProfilePage() {
       return
     }
 
-    // Check for at least one uppercase letter
     if (!/[A-Z]/.test(newPassword)) {
       setError("Password must contain at least one uppercase letter")
       setLoading(false)
       return
     }
 
-    // Check for at least one lowercase letter
     if (!/[a-z]/.test(newPassword)) {
       setError("Password must contain at least one lowercase letter")
       setLoading(false)
       return
     }
 
-    // Check for at least one digit
     if (!/[0-9]/.test(newPassword)) {
       setError("Password must contain at least one digit")
       setLoading(false)
       return
     }
 
-    // Check for at least one special character
     if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(newPassword)) {
       setError("Password must contain at least one special character")
       setLoading(false)
       return
     }
 
-    // Get all users
-    const usersJSON = localStorage.getItem("users")
-    const users = usersJSON ? JSON.parse(usersJSON) : []
+    try {
+      const userJSON = localStorage.getItem('currentUser')
+      if (!userJSON) {
+        router.push('/login')
+        return
+      }
 
-    // Find current user
-    const currentUser = users.find((u: any) => u.id === user.id)
+      const currentUser = JSON.parse(userJSON)
+      
+      // In a real app, you would call your backend API to change password
+      const usersJSON = localStorage.getItem("users")
+      const users = usersJSON ? JSON.parse(usersJSON) : []
+      const userToUpdate = users.find((u: any) => u.id === user.id)
 
-    if (!currentUser) {
-      setError("User not found")
+      if (!userToUpdate) {
+        setError("User not found")
+        setLoading(false)
+        return
+      }
+
+      // Verify current password (in a real app, this would be done on the backend)
+      if (userToUpdate.password !== currentPassword) {
+        setError("Current password is incorrect")
+        setLoading(false)
+        return
+      }
+
+      // Update password (in a real app, this would be done on the backend)
+      const updatedUsers = users.map((u: any) => 
+        u.id === user.id ? { ...u, password: newPassword } : u
+      )
+      localStorage.setItem("users", JSON.stringify(updatedUsers))
+
+      setSuccess("Password updated successfully")
+      setCurrentPassword("")
+      setNewPassword("")
+      setConfirmPassword("")
+    } catch (error: any) {
+      console.error('Update password error:', error)
+      setError(error.message || 'Failed to update password')
+    } finally {
       setLoading(false)
-      return
     }
-
-    // Verify current password
-    if (currentUser.password !== currentPassword) {
-      setError("Current password is incorrect")
-      setLoading(false)
-      return
-    }
-
-    // Update password
-    const updatedUsers = users.map((u: any) => (u.id === user.id ? { ...u, password: newPassword } : u))
-
-    // Save updated users
-    localStorage.setItem("users", JSON.stringify(updatedUsers))
-
-    setSuccess("Password updated successfully")
-    setCurrentPassword("")
-    setNewPassword("")
-    setConfirmPassword("")
-    setLoading(false)
   }
 
   const handleLogout = () => {
@@ -302,14 +329,10 @@ export default function ProfilePage() {
     router.push("/login")
   }
 
-  // Email verification
   const sendEmailOtp = () => {
-    // Generate a 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString()
     setGeneratedEmailOtp(otp)
     setEmailOtpSent(true)
-
-    // In a real app, you would send this OTP via email
     alert(`For demo purposes, your email OTP is: ${otp}`)
   }
 
@@ -323,7 +346,6 @@ export default function ProfilePage() {
     }
   }
 
-  // Profile photo handling
   const handleProfilePhotoClick = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click()
@@ -333,6 +355,19 @@ export default function ProfilePage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setError("Please select an image file")
+        return
+      }
+
+      // Validate file size (5MB max)
+      if (file.size > 5 * 1024 * 1024) {
+        setError("File size too large. Maximum 5MB allowed.")
+        return
+      }
+
+      setSelectedFile(file)
       const reader = new FileReader()
       reader.onload = (event) => {
         if (event.target?.result) {
@@ -345,6 +380,7 @@ export default function ProfilePage() {
 
   const removeProfilePhoto = () => {
     setProfilePhoto(null)
+    setSelectedFile(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
@@ -352,56 +388,27 @@ export default function ProfilePage() {
 
   const openFullScreenPhoto = () => {
     if (profilePhoto) {
-      const newWindow = window.open("", "_blank")
-      if (newWindow) {
-        newWindow.document.write(`
-          <html>
-            <head>
-              <title>Profile Photo</title>
-              <style>
-                body {
-                  margin: 0;
-                  padding: 0;
-                  display: flex;
-                  justify-content: center;
-                  align-items: center;
-                  min-height: 100vh;
-                  background-color: rgba(0, 0, 0, 0.9);
-                }
-                img {
-                  max-width: 90vw;
-                  max-height: 90vh;
-                  object-fit: contain;
-                  border: 2px solid white;
-                  box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
-                }
-                .close-btn {
-                  position: absolute;
-                  top: 20px;
-                  right: 20px;
-                  background: white;
-                  color: black;
-                  border: none;
-                  border-radius: 50%;
-                  width: 40px;
-                  height: 40px;
-                  font-size: 20px;
-                  cursor: pointer;
-                }
-              </style>
-            </head>
-            <body>
-              <button class="close-btn" onclick="window.close()">×</button>
-              <img src="${profilePhoto}" alt="Profile Photo" />
-            </body>
-          </html>
-        `)
-      }
+      setIsImageViewerOpen(true)
     }
   }
 
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    )
+  }
+
   if (!user) {
-    return <div className="flex justify-center items-center min-h-screen">Loading...</div>
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <Alert variant="destructive" className="max-w-md">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>User not found. Please log in again.</AlertDescription>
+        </Alert>
+      </div>
+    )
   }
 
   return (
@@ -413,7 +420,6 @@ export default function ProfilePage() {
           </Button>
         </Link>
         
-        {/* Profile dropdown menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex items-center space-x-2 focus:outline-none">
@@ -422,6 +428,7 @@ export default function ProfilePage() {
                   src={profilePhoto}
                   alt="Profile"
                   className="h-10 w-10 rounded-full object-cover border-2 border-gray-200 cursor-pointer hover:border-blue-500 transition-colors"
+                  onClick={openFullScreenPhoto}
                 />
               ) : (
                 <div className="bg-gray-200 rounded-full p-2 h-10 w-10 flex items-center justify-center hover:bg-gray-300 transition-colors">
@@ -461,12 +468,12 @@ export default function ProfilePage() {
                 {profilePhoto ? (
                   <div className="relative">
                     <img
-                      src={profilePhoto || "/placeholder.svg"}
+                      src={profilePhoto}
                       alt="Profile"
                       className="h-20 w-20 rounded-full object-cover border-2 border-gray-200 cursor-pointer"
                       onClick={(e) => {
                         e.stopPropagation()
-                        setIsImageViewerOpen(true)
+                        openFullScreenPhoto()
                       }}
                     />
                     <div className="absolute inset-0 bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
@@ -490,12 +497,20 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 )}
-                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  accept="image/*" 
+                  onChange={handleFileChange}
+                />
               </div>
               <div>
                 <CardTitle className="text-2xl">{user.name}</CardTitle>
                 <CardDescription>{user.email}</CardDescription>
-                <p className="text-sm text-gray-500">Member since {new Date(user.createdAt).toLocaleDateString()}</p>
+                <p className="text-sm text-gray-500">
+                  Member since {new Date(user.createdAt).toLocaleDateString()}
+                </p>
               </div>
             </div>
           </CardHeader>
@@ -553,7 +568,6 @@ export default function ProfilePage() {
                         value={email}
                         onChange={(e) => {
                           setEmail(e.target.value)
-                          // Reset verification if email changes
                           if (emailOtpVerified) {
                             setEmailOtpVerified(false)
                           }
@@ -563,11 +577,19 @@ export default function ProfilePage() {
                         disabled={emailOtpVerified}
                       />
                       {!emailOtpVerified ? (
-                        <Button type="button" onClick={sendEmailOtp} disabled={!email || !email.includes("@")}>
+                        <Button 
+                          type="button" 
+                          onClick={sendEmailOtp} 
+                          disabled={!email || !email.includes("@")}
+                        >
                           Send OTP
                         </Button>
                       ) : (
-                        <Button type="button" variant="outline" className="bg-green-50 text-green-600 border-green-200">
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          className="bg-green-50 text-green-600 border-green-200"
+                        >
                           <Check className="mr-2 h-4 w-4" /> Verified
                         </Button>
                       )}
@@ -705,7 +727,7 @@ export default function ProfilePage() {
       </div>
       {profilePhoto && (
         <ImageViewer
-          src={profilePhoto || "/placeholder.svg"}
+          src={profilePhoto}
           alt="Profile Photo"
           isOpen={isImageViewerOpen}
           onClose={() => setIsImageViewerOpen(false)}

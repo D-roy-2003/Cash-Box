@@ -45,15 +45,26 @@ export default function ReceiptPreview() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Get receipt data from localStorage
-    const storedData = localStorage.getItem("receiptData")
-    if (storedData) {
-      setReceiptData(JSON.parse(storedData))
-    } else {
-      // If no data, redirect back to create page
-      router.push("/create")
+    const fetchReceipt = async () => {
+      const urlParams = new URLSearchParams(window.location.search)
+      const receiptId = urlParams.get("id")
+
+      if (receiptId) {
+        try {
+          const response = await fetch(`/api/receipts/${receiptId}`)
+          if (!response.ok) throw new Error("Receipt not found")
+          const data = await response.json()
+          setReceiptData(data)
+        } catch (err) {
+          router.push("/create")
+        }
+      } else {
+        router.push("/create")
+      }
+      setLoading(false)
     }
-    setLoading(false)
+
+    fetchReceipt()
   }, [router])
 
   const handlePrint = () => {
@@ -192,21 +203,19 @@ export default function ReceiptPreview() {
                 <span className="font-medium">Date: </span>
                 {formatDate(receiptData.date)}
               </p>
-              {/* Only show payment method for full payment or advance payment */}
               {(receiptData.paymentStatus === "full" || receiptData.paymentStatus === "advance") && (
                 <p>
                   <span className="font-medium">Payment Method: </span>
                   {receiptData.paymentType.charAt(0).toUpperCase() + receiptData.paymentType.slice(1)}
                 </p>
               )}
-              {/* Add payment status information */}
               <p>
                 <span className="font-medium">Payment Status: </span>
                 {receiptData.paymentStatus === "full"
                   ? "Full Payment"
                   : receiptData.paymentStatus === "advance"
-                    ? "Advance Payment (Partial)"
-                    : "Due Payment"}
+                  ? "Advance Payment (Partial)"
+                  : "Due Payment"}
               </p>
               {receiptData.paymentDetails?.cardNumber && receiptData.paymentStatus !== "due" && (
                 <p>
@@ -241,7 +250,6 @@ export default function ReceiptPreview() {
 
         <div className="mb-8 overflow-x-auto print:overflow-visible">
           <h2 className="text-lg font-semibold mb-4 print:text-base">Items</h2>
-          {/* Update the items table to show advance/due information */}
           <table className="w-full print:text-sm">
             <thead>
               <tr className="border-b">
@@ -290,19 +298,15 @@ export default function ReceiptPreview() {
               ))}
             </tbody>
           </table>
-          {/* Update the total section to show due amounts */}
+
           <div className="mt-4 text-right">
             {receiptData.paymentStatus === "full" && (
-              <div className="text-lg font-bold print:text-base">
-                Total: ₹{ensureNumber(receiptData.total).toFixed(2)}
-              </div>
+              <div className="text-lg font-bold print:text-base">Total: ₹{ensureNumber(receiptData.total).toFixed(2)}</div>
             )}
 
             {receiptData.paymentStatus === "advance" && (
               <>
-                <div className="text-lg font-bold print:text-base">
-                  Total Value: ₹{calculateTotalItemValue().toFixed(2)}
-                </div>
+                <div className="text-lg font-bold print:text-base">Total Value: ₹{calculateTotalItemValue().toFixed(2)}</div>
                 <div className="text-base mt-1">Advance Paid: ₹{ensureNumber(receiptData.total).toFixed(2)}</div>
                 <div className="text-base font-bold text-red-500 mt-1 print:text-black">
                   Balance Due: ₹{ensureNumber(receiptData.dueTotal).toFixed(2)}
@@ -312,9 +316,7 @@ export default function ReceiptPreview() {
 
             {receiptData.paymentStatus === "due" && (
               <>
-                <div className="text-lg font-bold print:text-base">
-                  Total Value: ₹{calculateTotalItemValue().toFixed(2)}
-                </div>
+                <div className="text-lg font-bold print:text-base">Total Value: ₹{calculateTotalItemValue().toFixed(2)}</div>
                 <div className="text-base mt-1">
                   Already Paid: ₹{(calculateTotalItemValue() - ensureNumber(receiptData.dueTotal)).toFixed(2)}
                 </div>
@@ -333,22 +335,20 @@ export default function ReceiptPreview() {
           </div>
         )}
 
-        {/* Add a due payment notice if applicable */}
         {(receiptData.paymentStatus === "advance" || receiptData.paymentStatus === "due") &&
           receiptData.dueTotal &&
           receiptData.dueTotal > 0 && (
             <div className="mt-4 p-3 border border-red-200 bg-red-50 rounded-md print:border-black print:bg-white">
               <p className="text-red-700 font-medium print:text-black">Due Payment Notice</p>
               <p className="text-sm text-red-600 print:text-black">
-                A balance of ₹{ensureNumber(receiptData.dueTotal).toFixed(2)} is due for this transaction. Please ensure
-                timely payment to avoid any inconvenience.
+                A balance of ₹{ensureNumber(receiptData.dueTotal).toFixed(2)} is due for this transaction. Please ensure timely payment to avoid any inconvenience.
               </p>
             </div>
           )}
 
         <div className="mt-12 text-center text-gray-500 text-sm">
+          <p>Created at: {formatDate(receiptData.createdAt)}</p>
           <p>Thank you for your business!</p>
-          <p className="mt-1">Generated on {new Date(receiptData.createdAt).toLocaleString()}</p>
         </div>
       </Card>
     </div>

@@ -1,7 +1,5 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -19,53 +17,45 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
+  // Redirect to home if already logged in
   useEffect(() => {
-    // Check if user is already logged in
     const user = localStorage.getItem("currentUser")
     if (user) {
       router.push("/")
     }
   }, [router])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError("")
 
-    // Simple validation
-    if (!email || !password) {
-      setError("Please enter both email and password")
+    try {
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Login failed")
+      }
+
+      // Store only necessary user details and token
+      const { token, ...userInfo } = data
+      localStorage.setItem("currentUser", JSON.stringify({ ...userInfo, token }))
+
+      // Redirect to dashboard
+      router.push("/dashboard")
+    } catch (err: any) {
+      setError(err.message || "An unexpected error occurred")
+    } finally {
       setLoading(false)
-      return
     }
-
-    // Get users from localStorage
-    const usersJSON = localStorage.getItem("users")
-    const users = usersJSON ? JSON.parse(usersJSON) : []
-
-    // Find user with matching email
-    const user = users.find((u: any) => u.email === email)
-
-    if (!user) {
-      setError("User not found. Please check your email or sign up.")
-      setLoading(false)
-      return
-    }
-
-    // Check password (in a real app, you would use proper password hashing)
-    if (user.password !== password) {
-      setError("Incorrect password. Please try again.")
-      setLoading(false)
-      return
-    }
-
-    // Login successful
-    // Store current user in localStorage (excluding password)
-    const { password: _, ...userWithoutPassword } = user
-    localStorage.setItem("currentUser", JSON.stringify(userWithoutPassword))
-
-    // Redirect to home page
-    router.push("/")
   }
 
   return (
@@ -73,8 +63,13 @@ export default function LoginPage() {
       <div className="w-full max-w-md space-y-8">
         <div className="flex justify-start">
           <Link href="/">
-            <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-800 hover:bg-blue-50">
-              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Home
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Home
             </Button>
           </Link>
         </div>
@@ -82,8 +77,11 @@ export default function LoginPage() {
         <Card>
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold">Login</CardTitle>
-            <CardDescription>Enter your email and password to login to your account</CardDescription>
+            <CardDescription>
+              Enter your email and password to access your account
+            </CardDescription>
           </CardHeader>
+
           <CardContent>
             {error && (
               <Alert variant="destructive" className="mb-4">
@@ -105,10 +103,14 @@ export default function LoginPage() {
                   className="backdrop-blur-sm bg-white/30 border border-gray-200 shadow-sm"
                 />
               </div>
+
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
-                  <Link href="#" className="text-sm text-blue-600 hover:text-blue-500">
+                  <Link
+                    href="/forgot-password"
+                    className="text-sm text-blue-600 hover:text-blue-500"
+                  >
                     Forgot password?
                   </Link>
                 </div>
@@ -121,15 +123,20 @@ export default function LoginPage() {
                   className="backdrop-blur-sm bg-white/30 border border-gray-200 shadow-sm"
                 />
               </div>
+
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? "Logging in..." : "Login"}
               </Button>
             </form>
           </CardContent>
+
           <CardFooter className="flex flex-col">
             <div className="mt-2 text-center text-sm text-gray-600">
               Don&apos;t have an account?{" "}
-              <Link href="/signup" className="font-medium text-blue-600 hover:text-blue-500">
+              <Link
+                href="/signup"
+                className="font-medium text-blue-600 hover:text-blue-500"
+              >
                 Sign up
               </Link>
             </div>

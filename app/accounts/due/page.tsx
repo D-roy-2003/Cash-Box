@@ -6,6 +6,7 @@ import { ArrowLeft, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
 interface DueRecord {
   id: string
@@ -41,100 +42,91 @@ const countryCodes = [
 export default function DuePage() {
   const router = useRouter()
   const [dueRecords, setDueRecords] = useState<DueRecord[]>([])
-  const [user, setUser] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [user, setUser] = useState<{ token: string } | null>(null)
 
   useEffect(() => {
-    // Check if user is logged in
-    const userJSON = localStorage.getItem("currentUser")
-    if (!userJSON) {
-      router.push("/login")
-      return
+    const fetchData = async () => {
+      try {
+        const userJSON = localStorage.getItem('currentUser')
+        if (!userJSON) {
+          router.push('/login')
+          return
+        }
+
+        const userData = JSON.parse(userJSON)
+        setUser(userData)
+
+        const response = await fetch('/api/due', {
+          headers: { Authorization: `Bearer ${userData.token}` }
+        })
+
+        if (!response.ok) throw new Error('Failed to fetch due records')
+        
+        const data = await response.json()
+        setDueRecords(data)
+      } catch (error) {
+        console.error('Fetch error:', error)
+        toast.error('Failed to load due records')
+      } finally {
+        setIsLoading(false)
+      }
     }
 
-    const userData = JSON.parse(userJSON)
-
-    // Check if profile is complete
-    if (!userData.profileComplete) {
-      router.push("/profile?from=/accounts")
-      return
-    }
-
-    setUser(userData)
-
-    // Load due records from localStorage
-    const storedRecords = localStorage.getItem("dueRecords")
-    if (storedRecords) {
-      setDueRecords(JSON.parse(storedRecords))
-    }
+    fetchData()
   }, [router])
 
-  const saveData = (newRecords: DueRecord[]) => {
-    localStorage.setItem("dueRecords", JSON.stringify(newRecords))
-    setDueRecords(newRecords)
+  const handleMarkAsPaid = async (record: DueRecord) => {
+    if (!user || isProcessing) return
 
-    // Update total due balance
-    updateTotalDueBalance(newRecords)
-  }
-
-  const updateTotalDueBalance = (records: DueRecord[]) => {
-    const totalDue = records.reduce((total, record) => {
-      if (!record.isPaid) {
-        return total + record.amountDue
-      }
-      return total
-    }, 0)
-
-    localStorage.setItem("totalDueBalance", totalDue.toString())
-  }
-
-  const handleMarkAsPaid = (id: string) => {
-    const record = dueRecords.find((r) => r.id === id)
-    if (!record || record.isPaid) return
-
-    // Update the record to mark as paid
-    const updatedRecords = dueRecords.map((r) => {
-      if (r.id === id) {
-        return { ...r, isPaid: true, paidAt: new Date().toISOString() }
-      }
-      return r
-    })
-
-    // Save updated records
-    saveData(updatedRecords)
-
-    // Add the payment to transactions in accounts
-    const storedTransactions = localStorage.getItem("accountTransactions")
-    const storedBalance = localStorage.getItem("accountBalance")
-
-    let transactions = storedTransactions ? JSON.parse(storedTransactions) : []
-    let balance = storedBalance ? Number.parseFloat(storedBalance) : 0
-
-    // Add new transaction for the payment received
-    const newTransaction = {
-      id: Date.now().toString(),
-      particulars: `Payment received from ${record.customerName} for ${record.productOrdered} (Due Payment)`,
-      amount: record.amountDue,
-      type: "credit",
-      date: new Date().toISOString(),
+    try {
+      setIsProcessing(true)
+      const response = await fetch('/api/due', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.token}`
+        },
+        body: JSON.stringify({ id: record.id })
+      })
+      
+      if (!response.ok) throw new Error('Payment processing failed')
+      
+      // Optimistic UI update
+      setDueRecords(prev => prev.filter(r => r.id !== record.id))
+      toast.success(`Payment from ${record.customerName} recorded`)
+    } catch (err) {
+      console.error('Payment error:', err)
+      toast.error(err instanceof Error ? err.message : 'Payment failed')
+    } finally {
+      setIsProcessing(false)
     }
-
-    transactions = [...transactions, newTransaction]
-    balance += record.amountDue
-
-    // Save updated transactions and balance
-    localStorage.setItem("accountTransactions", JSON.stringify(transactions))
-    localStorage.setItem("accountBalance", balance.toString())
   }
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString()
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
   }
 
   const isPastDue = (dateString: string) => {
     const dueDate = new Date(dateString)
     const today = new Date()
+    today.setHours(0, 0, 0, 0)
     return dueDate < today
+  }
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto py-8 px-4">
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -154,50 +146,30 @@ export default function DuePage() {
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
+              {/* Desktop Table View */}
               <div className="border rounded-lg overflow-hidden hidden md:block">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th
-                        scope="col"
-                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Customer
                       </th>
-                      <th
-                        scope="col"
-                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Product
                       </th>
-                      <th
-                        scope="col"
-                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Qty
                       </th>
-                      <th
-                        scope="col"
-                        className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Amount
                       </th>
-                      <th
-                        scope="col"
-                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Due Date
                       </th>
-                      <th
-                        scope="col"
-                        className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Status
                       </th>
-                      <th
-                        scope="col"
-                        className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Action
                       </th>
                     </tr>
@@ -211,51 +183,58 @@ export default function DuePage() {
                             <span className="mr-1">
                               {countryCodes.find((c) => c.code === record.customerCountryCode)?.flag || "🌍"}
                             </span>
-                            <span className="truncate max-w-[80px] md:max-w-none">
-                              {record.customerCountryCode} {record.customerContact}
-                            </span>
+                            {record.customerCountryCode} {record.customerContact}
                           </div>
                           {record.receiptNumber && (
                             <div className="text-xs text-gray-400 mt-1">Receipt: #{record.receiptNumber}</div>
                           )}
                         </td>
-                        <td className="px-4 py-4 text-sm text-gray-500 max-w-[80px] truncate md:max-w-none md:whitespace-nowrap">
+                        <td className="px-4 py-4 text-sm text-gray-500">
                           {record.productOrdered}
                         </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{record.quantity}</td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {record.quantity}
+                        </td>
                         <td className="px-4 py-4 whitespace-nowrap text-sm text-right font-medium text-red-600">
                           ₹{record.amountDue.toFixed(2)}
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <span
-                            className={
-                              isPastDue(record.expectedPaymentDate) && !record.isPaid ? "text-red-600 font-medium" : ""
-                            }
-                          >
+                          <span className={isPastDue(record.expectedPaymentDate) && !record.isPaid ? "text-red-600 font-medium" : ""}>
                             {formatDate(record.expectedPaymentDate)}
                           </span>
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap text-center">
-                          <span
-                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              record.isPaid
-                                ? "bg-green-100 text-green-800"
-                                : isPastDue(record.expectedPaymentDate)
-                                  ? "bg-red-100 text-red-800"
-                                  : "bg-yellow-100 text-yellow-800"
-                            }`}
-                          >
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            record.isPaid
+                              ? "bg-green-100 text-green-800"
+                              : isPastDue(record.expectedPaymentDate)
+                                ? "bg-red-100 text-red-800"
+                                : "bg-yellow-100 text-yellow-800"
+                          }`}>
                             {record.isPaid ? "Paid" : isPastDue(record.expectedPaymentDate) ? "Overdue" : "Pending"}
                           </span>
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap text-center text-sm font-medium">
                           {!record.isPaid ? (
                             <Button
-                              onClick={() => handleMarkAsPaid(record.id)}
+                              onClick={() => handleMarkAsPaid(record)}
                               size="sm"
                               className="bg-green-600 hover:bg-green-700"
+                              disabled={isProcessing}
                             >
-                              <Check className="mr-1 h-3 w-3" /> Mark Paid
+                              {isProcessing ? (
+                                <span className="flex items-center">
+                                  <svg className="animate-spin -ml-1 mr-2 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                  Processing...
+                                </span>
+                              ) : (
+                                <>
+                                  <Check className="mr-1 h-3 w-3" /> Mark Paid
+                                </>
+                              )}
                             </Button>
                           ) : (
                             <span className="text-gray-500 text-xs">Paid on {formatDate(record.paidAt || "")}</span>
@@ -266,7 +245,8 @@ export default function DuePage() {
                   </tbody>
                 </table>
               </div>
-              {/* Mobile card view for due records */}
+              
+              {/* Mobile Card View */}
               <div className="md:hidden mt-4 space-y-4">
                 {dueRecords.map((record) => (
                   <div
@@ -282,7 +262,7 @@ export default function DuePage() {
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <h3 className="font-medium">{record.customerName}</h3>
-                        <p className="text-sm text-gray-600 truncate">{record.productOrdered}</p>
+                        <p className="text-sm text-gray-600">{record.productOrdered}</p>
                         {record.receiptNumber && (
                           <p className="text-xs text-gray-400">Receipt: #{record.receiptNumber}</p>
                         )}
@@ -305,20 +285,33 @@ export default function DuePage() {
                     <div className="flex justify-between items-center">
                       <div>
                         <span className="text-xs text-gray-500 mr-2">Due: </span>
-                        <span
-                          className={`text-xs ${isPastDue(record.expectedPaymentDate) && !record.isPaid ? "text-red-600 font-medium" : ""}`}
-                        >
+                        <span className={`text-xs ${
+                          isPastDue(record.expectedPaymentDate) && !record.isPaid ? "text-red-600 font-medium" : ""
+                        }`}>
                           {formatDate(record.expectedPaymentDate)}
                         </span>
                       </div>
 
                       {!record.isPaid ? (
                         <Button
-                          onClick={() => handleMarkAsPaid(record.id)}
+                          onClick={() => handleMarkAsPaid(record)}
                           size="sm"
                           className="bg-green-600 hover:bg-green-700"
+                          disabled={isProcessing}
                         >
-                          <Check className="mr-1 h-3 w-3" /> Mark Paid
+                          {isProcessing ? (
+                            <span className="flex items-center">
+                              <svg className="animate-spin -ml-1 mr-2 h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Processing...
+                            </span>
+                          ) : (
+                            <>
+                              <Check className="mr-1 h-3 w-3" /> Mark Paid
+                            </>
+                          )}
                         </Button>
                       ) : (
                         <span className="text-xs text-green-600">Paid on {formatDate(record.paidAt || "")}</span>

@@ -25,39 +25,43 @@ export default function AccountsPage() {
   const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
-    // Check if user is logged in
-    const userJSON = localStorage.getItem("currentUser")
-    if (!userJSON) {
-      router.push("/login")
-      return
+    const fetchData = async () => {
+      const userJSON = localStorage.getItem("currentUser")
+      if (!userJSON) {
+        router.push("/login")
+        return
+      }
+
+      const userData = JSON.parse(userJSON)
+
+      // Check if profile is complete
+      if (!userData.profileComplete) {
+        router.push("/profile?from=/accounts")
+        return
+      }
+
+      setUser(userData)
+
+      try {
+        const response = await fetch("/api/transactions", {
+          headers: { Authorization: `Bearer ${userData.token}` },
+        })
+        const data = await response.json()
+
+        setTransactions(data.transactions)
+        setBalance(data.balance)
+        setTotalDueBalance(data.totalDueBalance)
+
+        // Save to localStorage for persistence
+        localStorage.setItem("accountTransactions", JSON.stringify(data.transactions))
+        localStorage.setItem("accountBalance", data.balance.toString())
+        localStorage.setItem("totalDueBalance", data.totalDueBalance.toString())
+      } catch (error) {
+        console.error("Failed to fetch data:", error)
+      }
     }
 
-    const userData = JSON.parse(userJSON)
-
-    // Check if profile is complete
-    if (!userData.profileComplete) {
-      router.push("/profile?from=/accounts")
-      return
-    }
-
-    setUser(userData)
-
-    // Load transactions and balance from localStorage
-    const storedTransactions = localStorage.getItem("accountTransactions")
-    const storedBalance = localStorage.getItem("accountBalance")
-    const storedDueBalance = localStorage.getItem("totalDueBalance")
-
-    if (storedTransactions) {
-      setTransactions(JSON.parse(storedTransactions))
-    }
-
-    if (storedBalance) {
-      setBalance(Number.parseFloat(storedBalance))
-    }
-
-    if (storedDueBalance) {
-      setTotalDueBalance(Number.parseFloat(storedDueBalance))
-    }
+    fetchData()
   }, [router])
 
   const saveData = (newTransactions: Transaction[], newBalance: number) => {
@@ -67,29 +71,48 @@ export default function AccountsPage() {
     setBalance(newBalance)
   }
 
-  const handleCredit = () => {
+  const handleCredit = async () => {
     if (!particulars || !amount || isNaN(Number.parseFloat(amount)) || Number.parseFloat(amount) <= 0) {
       alert("Please enter valid particulars and amount")
       return
     }
 
     const amountValue = Number.parseFloat(amount)
-    const newBalance = balance + amountValue
 
-    const newTransaction: Transaction = {
-      id: Date.now().toString(),
-      particulars,
-      amount: amountValue,
-      type: "credit",
-      date: new Date().toISOString(),
+    try {
+      const response = await fetch("/api/transactions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({
+          particulars,
+          amount: amountValue,
+          type: "credit",
+        }),
+      })
+
+      if (!response.ok) throw new Error("Failed to save credit transaction")
+
+      const newTransaction: Transaction = {
+        id: Date.now().toString(),
+        particulars,
+        amount: amountValue,
+        type: "credit",
+        date: new Date().toISOString(),
+      }
+
+      const newTransactions = [...transactions, newTransaction]
+      const newBalance = balance + amountValue
+      saveData(newTransactions, newBalance)
+
+      setParticulars("")
+      setAmount("")
+    } catch (err) {
+      console.error(err)
+      alert("Error saving transaction")
     }
-
-    const newTransactions = [...transactions, newTransaction]
-    saveData(newTransactions, newBalance)
-
-    // Reset form
-    setParticulars("")
-    setAmount("")
   }
 
   const handleDebit = () => {
@@ -112,7 +135,6 @@ export default function AccountsPage() {
     const newTransactions = [...transactions, newTransaction]
     saveData(newTransactions, newBalance)
 
-    // Reset form
     setParticulars("")
     setAmount("")
   }
@@ -133,14 +155,16 @@ export default function AccountsPage() {
       return
     }
 
-    // Sort transactions by date (oldest first)
-    const sortedTransactions = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    const sortedTransactions = [...transactions].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    )
 
-    // Calculate running balance for each transaction
     let runningBalance = 0
     const dataToExport = sortedTransactions.map((transaction) => {
       runningBalance =
-        transaction.type === "credit" ? runningBalance + transaction.amount : runningBalance - transaction.amount
+        transaction.type === "credit"
+          ? runningBalance + transaction.amount
+          : runningBalance - transaction.amount
 
       return {
         Date: formatDateOnly(transaction.date),
@@ -151,23 +175,18 @@ export default function AccountsPage() {
       }
     })
 
-    // Convert to CSV for Excel compatibility with proper formatting
     const headers = Object.keys(dataToExport[0]).join(",")
-
-    // Format the rows with proper cell width
-    const rows = dataToExport.map((row) => {
-      return [`"${row.Date}"`, `"${row.Particulars}"`, `"${row.Type}"`, `"${row.Amount}"`, `"${row.Balance}"`].join(",")
-    })
-
-    // Create CSV content with headers in CAPS
     const headersCaps = headers
       .split(",")
       .map((h) => `"${h.toUpperCase()}"`)
       .join(",")
-    const csvContent = [headersCaps, ...rows].join("\n")
 
-    // Create a blob with Excel styling hints
-    const bom = "\uFEFF" // UTF-8 BOM for Excel
+    const rows = dataToExport.map((row) => {
+      return [`"${row.Date}"`, `"${row.Particulars}"`, `"${row.Type}"`, `"${row.Amount}"`, `"${row.Balance}"`].join(",")
+    })
+
+    const csvContent = [headersCaps, ...rows].join("\n")
+    const bom = "\uFEFF"
     const blob = new Blob([bom + csvContent], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
@@ -217,6 +236,29 @@ export default function AccountsPage() {
             </div>
           </div>
 
+          <div className="flex flex-col md:flex-row gap-4 mb-6">
+            <input
+              type="text"
+              value={particulars}
+              onChange={(e) => setParticulars(e.target.value)}
+              placeholder="Particulars"
+              className="flex-1 border px-4 py-2 rounded-md"
+            />
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="Amount"
+              className="flex-1 border px-4 py-2 rounded-md"
+            />
+            <Button onClick={handleCredit} className="bg-green-600 hover:bg-green-700">
+              Add Credit
+            </Button>
+            <Button onClick={handleDebit} className="bg-red-600 hover:bg-red-700">
+              Add Debit
+            </Button>
+          </div>
+
           {transactions.length > 0 && (
             <div className="mt-8">
               <div className="flex justify-between items-center mb-4">
@@ -230,28 +272,16 @@ export default function AccountsPage() {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                        >
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Date
                         </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                        >
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Particulars
                         </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                        >
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Type
                         </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-                        >
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Amount
                         </th>
                       </tr>
@@ -259,15 +289,11 @@ export default function AccountsPage() {
                     <tbody className="bg-white divide-y divide-gray-200">
                       {transactions.map((transaction) => (
                         <tr key={transaction.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {formatDate(transaction.date)}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900 max-w-[150px] truncate md:max-w-none md:whitespace-nowrap">
-                            {transaction.particulars}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <td className="px-6 py-4 text-sm text-gray-500">{formatDate(transaction.date)}</td>
+                          <td className="px-6 py-4 text-sm text-gray-900">{transaction.particulars}</td>
+                          <td className="px-6 py-4 text-sm">
                             <span
-                              className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              className={`px-2 inline-flex text-xs font-semibold rounded-full ${
                                 transaction.type === "credit"
                                   ? "bg-green-100 text-green-800"
                                   : "bg-red-100 text-red-800"
@@ -276,7 +302,7 @@ export default function AccountsPage() {
                               {transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1)}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium">
+                          <td className="px-6 py-4 text-sm text-right font-medium">
                             <span className={transaction.type === "credit" ? "text-green-600" : "text-red-600"}>
                               ₹{transaction.amount.toFixed(2)}
                             </span>
@@ -287,7 +313,7 @@ export default function AccountsPage() {
                   </table>
                 </div>
               </div>
-              {/* Mobile card view for transactions */}
+
               <div className="md:hidden mt-4 space-y-4">
                 {transactions.map((transaction) => (
                   <div
