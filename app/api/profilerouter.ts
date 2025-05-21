@@ -1,29 +1,29 @@
 // app/api/profile/route.ts
-import { NextResponse } from 'next/server'
-import mysql from 'mysql2/promise'
-import { dbConfig } from '@/lib/db'
-import { verifyJwt } from '@/lib/auth'
+import { NextResponse } from "next/server";
+import mysql from "mysql2/promise";
+import { pool } from "@/lib/database";
+import { verifyJwt } from "@/lib/auth";
 
 // Create a connection pool when the module is loaded
 const pool = mysql.createPool({
   ...dbConfig,
   waitForConnections: true,
   connectionLimit: 10, // Adjust based on your needs
-  queueLimit: 0
-})
+  queueLimit: 0,
+});
 
 export async function GET(request: Request) {
-  const token = request.headers.get('authorization')?.split(' ')[1]
+  const token = request.headers.get("authorization")?.split(" ")[1];
 
   if (!token) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let connection
+  let connection;
 
   try {
-    const decoded = await verifyJwt(token)
-    connection = await pool.getConnection()
+    const decoded = await verifyJwt(token);
+    connection = await pool.getConnection();
 
     const [users] = await connection.query(
       `SELECT id, name, email, 
@@ -35,31 +35,31 @@ export async function GET(request: Request) {
        FROM users 
        WHERE id = ?`,
       [decoded.userId]
-    )
+    );
 
-    return NextResponse.json(users[0] || {})
+    return NextResponse.json(users[0] || {});
   } catch (error: any) {
-    console.error('GET /profile error:', error)
+    console.error("GET /profile error:", error);
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch profile' },
+      { error: error.message || "Failed to fetch profile" },
       { status: 500 }
-    )
+    );
   } finally {
-    if (connection) connection.release() // Release back to the pool instead of ending
+    if (connection) connection.release(); // Release back to the pool instead of ending
   }
 }
 
 export async function PUT(request: Request) {
-  const token = request.headers.get('authorization')?.split(' ')[1]
+  const token = request.headers.get("authorization")?.split(" ")[1];
   if (!token) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let connection
+  let connection;
 
   try {
-    const decoded = await verifyJwt(token)
-    const data = await request.json()
+    const decoded = await verifyJwt(token);
+    const data = await request.json();
 
     // Basic validation
     const {
@@ -68,17 +68,23 @@ export async function PUT(request: Request) {
       storeAddress,
       storeContact,
       storeCountryCode,
-      profilePhoto
-    } = data
+      profilePhoto,
+    } = data;
 
-    if (!name || !storeName || !storeAddress || !storeContact || !storeCountryCode) {
+    if (
+      !name ||
+      !storeName ||
+      !storeAddress ||
+      !storeContact ||
+      !storeCountryCode
+    ) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: "Missing required fields" },
         { status: 400 }
-      )
+      );
     }
 
-    connection = await pool.getConnection()
+    connection = await pool.getConnection();
 
     await connection.query(
       `UPDATE users SET 
@@ -96,9 +102,9 @@ export async function PUT(request: Request) {
         storeContact,
         storeCountryCode,
         profilePhoto || null,
-        decoded.userId
+        decoded.userId,
       ]
-    )
+    );
 
     return NextResponse.json({
       success: true,
@@ -108,16 +114,16 @@ export async function PUT(request: Request) {
         storeAddress,
         storeContact,
         storeCountryCode,
-        profilePhoto
-      }
-    })
+        profilePhoto,
+      },
+    });
   } catch (error: any) {
-    console.error('PUT /profile error:', error)
+    console.error("PUT /profile error:", error);
     return NextResponse.json(
-      { error: error.message || 'Failed to update profile' },
+      { error: error.message || "Failed to update profile" },
       { status: 500 }
-    )
+    );
   } finally {
-    if (connection) connection.release() // Release back to the pool
+    if (connection) connection.release(); // Release back to the pool
   }
 }

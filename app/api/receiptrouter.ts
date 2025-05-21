@@ -1,49 +1,50 @@
 // app/api/receipts/route.ts
-import { NextResponse } from 'next/server'
-import mysql from 'mysql2/promise'
-import { dbConfig } from '@/lib/db'
-import { verifyJwt } from '@/lib/auth'
+import { NextResponse } from "next/server";
+import mysql from "mysql2/promise";
+import { pool } from "@/lib/database";
+import { verifyJwt } from "@/lib/auth";
 
 interface ReceiptItem {
-  description: string
-  quantity: number
-  price: number
-  advanceAmount?: number
-  dueAmount?: number
+  description: string;
+  quantity: number;
+  price: number;
+  advanceAmount?: number;
+  dueAmount?: number;
 }
 
 interface PaymentDetails {
-  cardNumber?: string
-  phoneNumber?: string
-  phoneCountryCode?: string
+  cardNumber?: string;
+  phoneNumber?: string;
+  phoneCountryCode?: string;
 }
 
 interface ReceiptBody {
-  receiptNumber: string
-  date: string
-  customerName: string
-  customerContact: string
-  customerCountryCode: string
-  paymentType: string
-  paymentStatus: string
-  notes?: string
-  total: number
-  dueTotal: number
-  items: ReceiptItem[]
-  paymentDetails?: PaymentDetails
+  receiptNumber: string;
+  date: string;
+  customerName: string;
+  customerContact: string;
+  customerCountryCode: string;
+  paymentType: string;
+  paymentStatus: string;
+  notes?: string;
+  total: number;
+  dueTotal: number;
+  items: ReceiptItem[];
+  paymentDetails?: PaymentDetails;
 }
 
 export async function POST(request: Request) {
-  const token = request.headers.get('authorization')?.split(' ')[1]
-  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const token = request.headers.get("authorization")?.split(" ")[1];
+  if (!token)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let connection
+  let connection;
 
   try {
-    const decoded = await verifyJwt(token)
-    if (!decoded?.userId) throw new Error('Invalid token payload')
+    const decoded = await verifyJwt(token);
+    if (!decoded?.userId) throw new Error("Invalid token payload");
 
-    const body: ReceiptBody = await request.json()
+    const body: ReceiptBody = await request.json();
 
     // Basic validation
     if (
@@ -56,11 +57,14 @@ export async function POST(request: Request) {
       !Array.isArray(body.items) ||
       body.items.length === 0
     ) {
-      return NextResponse.json({ error: 'Missing required fields or items' }, { status: 400 })
+      return NextResponse.json(
+        { error: "Missing required fields or items" },
+        { status: 400 }
+      );
     }
 
-    connection = await mysql.createConnection(dbConfig)
-    await connection.beginTransaction()
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
 
     // Insert receipt
     const [receiptResult] = await connection.query<mysql.ResultSetHeader>(
@@ -81,15 +85,22 @@ export async function POST(request: Request) {
         body.dueTotal,
         decoded.userId,
       ]
-    )
+    );
 
-    const receiptId = receiptResult.insertId
+    const receiptId = receiptResult.insertId;
 
     // Insert receipt items
     for (const item of body.items) {
-      if (!item.description || typeof item.quantity !== 'number' || typeof item.price !== 'number') {
-        await connection.rollback()
-        return NextResponse.json({ error: 'Invalid item data' }, { status: 400 })
+      if (
+        !item.description ||
+        typeof item.quantity !== "number" ||
+        typeof item.price !== "number"
+      ) {
+        await connection.rollback();
+        return NextResponse.json(
+          { error: "Invalid item data" },
+          { status: 400 }
+        );
       }
 
       await connection.query(
@@ -104,7 +115,7 @@ export async function POST(request: Request) {
           item.advanceAmount ?? 0,
           item.dueAmount ?? 0,
         ]
-      )
+      );
     }
 
     // Insert payment details if provided
@@ -119,16 +130,19 @@ export async function POST(request: Request) {
           body.paymentDetails.phoneNumber || null,
           body.paymentDetails.phoneCountryCode || null,
         ]
-      )
+      );
     }
 
     // Insert due record if payment is partial or due exists
-    if (body.paymentStatus !== 'full' && body.dueTotal > 0) {
-      const productOrdered = body.items.map(i => i.description).join(', ')
-      const totalQuantity = body.items.reduce((sum, i) => sum + (i.quantity || 0), 0)
+    if (body.paymentStatus !== "full" && body.dueTotal > 0) {
+      const productOrdered = body.items.map((i) => i.description).join(", ");
+      const totalQuantity = body.items.reduce(
+        (sum, i) => sum + (i.quantity || 0),
+        0
+      );
       const expectedPaymentDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
         .toISOString()
-        .split('T')[0]
+        .split("T")[0];
 
       await connection.query(
         `INSERT INTO due_records (
@@ -147,7 +161,7 @@ export async function POST(request: Request) {
           decoded.userId,
           body.receiptNumber,
         ]
-      )
+      );
     }
 
     // Insert account transaction if total > 0 (payment received)
@@ -159,29 +173,32 @@ export async function POST(request: Request) {
         [
           `Payment from ${body.customerName}`,
           body.total,
-          'credit',
+          "credit",
           decoded.userId,
           receiptId,
         ]
-      )
+      );
     }
 
-    await connection.commit()
+    await connection.commit();
 
-    return NextResponse.json({ success: true, receiptId })
+    return NextResponse.json({ success: true, receiptId });
   } catch (error: any) {
     if (connection) {
       try {
-        await connection.rollback()
+        await connection.rollback();
       } catch {
         // ignore rollback errors
       }
     }
-    console.error('Error creating receipt:', error)
-    return NextResponse.json({ error: error.message || 'Failed to create receipt' }, { status: 500 })
+    console.error("Error creating receipt:", error);
+    return NextResponse.json(
+      { error: error.message || "Failed to create receipt" },
+      { status: 500 }
+    );
   } finally {
     if (connection) {
-      await connection.end()
+      await connection.release();
     }
   }
 }
