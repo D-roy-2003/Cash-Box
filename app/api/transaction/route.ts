@@ -1,8 +1,23 @@
 // app/api/transactions/route.ts
+
 import { NextResponse } from "next/server";
-import mysql from "mysql2/promise";
 import { pool } from "@/lib/database";
 import { verifyJwt } from "@/lib/auth";
+import { RowDataPacket } from "mysql2/promise";
+
+interface BalanceResult extends RowDataPacket {
+  balance: number;
+  total_due_balance: number;
+}
+
+interface Transaction extends RowDataPacket {
+  id: number;
+  particulars: string;
+  amount: number;
+  type: string;
+  user_id: number;
+  transaction_date: string;
+}
 
 export async function GET(request: Request) {
   const token = request.headers.get("authorization")?.split(" ")[1];
@@ -12,27 +27,28 @@ export async function GET(request: Request) {
   let connection;
   try {
     const decoded = await verifyJwt(token);
-    const connection = await pool.getConnection();
+    connection = await pool.getConnection();
 
-    const [transactions] = await connection.query(
+    const [transactions] = await connection.query<Transaction[]>(
       `SELECT * FROM account_transactions
        WHERE user_id = ? ORDER BY transaction_date DESC`,
       [decoded.userId]
     );
 
-    const [balanceResult] = await connection.query(
+    const [balanceResult] = await connection.query<BalanceResult[]>(
       `SELECT balance, total_due_balance FROM account_balances
        WHERE user_id = ?`,
       [decoded.userId]
     );
 
-    const balanceRow = (balanceResult as any[])[0] || {};
+    const balanceRow = balanceResult[0] || { balance: 0, total_due_balance: 0 };
 
     return NextResponse.json({
       transactions,
-      balance: balanceRow.balance || 0,
-      totalDueBalance: balanceRow.total_due_balance || 0,
+      balance: balanceRow.balance,
+      totalDueBalance: balanceRow.total_due_balance,
     });
+
   } catch (error) {
     console.error("GET /transactions error:", error);
     return NextResponse.json(
@@ -54,18 +70,16 @@ export async function POST(request: Request) {
     const decoded = await verifyJwt(token);
     const { particulars, amount, type } = await request.json();
 
-    // Basic input validation
     if (
       !particulars ||
       typeof particulars !== "string" ||
-      !amount ||
       typeof amount !== "number" ||
       !["credit", "debit"].includes(type)
     ) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400 });
     }
 
-    const connection = await pool.getConnection();
+    connection = await pool.getConnection();
 
     await connection.query(
       `INSERT INTO account_transactions (particulars, amount, type, user_id)
@@ -74,6 +88,7 @@ export async function POST(request: Request) {
     );
 
     return NextResponse.json({ success: true });
+
   } catch (error) {
     console.error("POST /transactions error:", error);
     return NextResponse.json(

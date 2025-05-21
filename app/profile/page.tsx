@@ -25,11 +25,11 @@ interface UserProfile {
   name: string
   email: string
   createdAt: string
-  storeName?: string
-  storeAddress?: string
-  storeContact?: string
-  storeCountryCode?: string
-  profilePhoto?: string
+  storeName: string
+  storeAddress: string
+  storeContact: string
+  storeCountryCode: string
+  profilePhoto?: string | null
   emailVerified?: boolean
 }
 
@@ -67,13 +67,13 @@ export default function ProfilePage() {
 
   const setUserState = useCallback((userData: UserProfile) => {
     setUser(userData)
-    setName(userData.name)
-    setEmail(userData.email)
+    setName(userData.name || "")
+    setEmail(userData.email || "")
     setStoreName(userData.storeName || "")
     setStoreAddress(userData.storeAddress || "")
     setStoreContact(userData.storeContact || "")
     setStoreCountryCode(userData.storeCountryCode || "+91")
-    setEmailOtpVerified(userData.emailVerified || false)
+    setEmailOtpVerified(!!userData.emailVerified)
     setProfilePhoto(userData.profilePhoto || null)
   }, [])
 
@@ -143,8 +143,8 @@ export default function ProfilePage() {
   }
 
   const handlePhoneChange = (value: string, countryCode: string) => {
-    setStoreContact(value)
-    setStoreCountryCode(countryCode)
+    setStoreContact(value || "")
+    setStoreCountryCode(countryCode || "+91")
     validateContact(value)
   }
 
@@ -187,27 +187,50 @@ export default function ProfilePage() {
       }
 
       const currentUser = JSON.parse(userJSON)
-      const formData = new FormData()
       
-      // Add form fields
-      formData.append('name', name)
-      formData.append('storeName', storeName)
-      formData.append('storeAddress', storeAddress)
-      formData.append('storeContact', storeContact)
-      formData.append('storeCountryCode', storeCountryCode)
-      if (profilePhoto) {
-        formData.append('currentPhotoUrl', profilePhoto)
-      }
+      // Handle file upload separately if a new file was selected
+      let photoUrl = profilePhoto || null
       if (selectedFile) {
-        formData.append('profilePhoto', selectedFile)
+        const uploadFormData = new FormData()
+        uploadFormData.append('file', selectedFile)
+        
+        const uploadResponse = await fetch('/api/upload', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${currentUser.token}`
+          },
+          body: uploadFormData
+        })
+
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload profile picture')
+        }
+
+        const uploadData = await uploadResponse.json()
+        photoUrl = uploadData.url
+      } else if (profilePhoto === null) {
+        // Explicitly indicate we want to remove the photo
+        photoUrl = null
+      }
+
+      // Send profile data as JSON
+      const profileData = {
+        name,
+        storeName,
+        storeAddress,
+        storeContact,
+        storeCountryCode,
+        profilePhoto: photoUrl,
+        emailVerified: emailOtpVerified
       }
 
       const response = await fetch('/api/profile', {
         method: 'PUT',
-        headers: { 
+        headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${currentUser.token}`
         },
-        body: formData
+        body: JSON.stringify(profileData)
       })
 
       if (!response.ok) {
@@ -288,7 +311,6 @@ export default function ProfilePage() {
 
       const currentUser = JSON.parse(userJSON)
       
-      // In a real app, you would call your backend API to change password
       const usersJSON = localStorage.getItem("users")
       const users = usersJSON ? JSON.parse(usersJSON) : []
       const userToUpdate = users.find((u: any) => u.id === user.id)
@@ -299,14 +321,12 @@ export default function ProfilePage() {
         return
       }
 
-      // Verify current password (in a real app, this would be done on the backend)
       if (userToUpdate.password !== currentPassword) {
         setError("Current password is incorrect")
         setLoading(false)
         return
       }
 
-      // Update password (in a real app, this would be done on the backend)
       const updatedUsers = users.map((u: any) => 
         u.id === user.id ? { ...u, password: newPassword } : u
       )
@@ -553,7 +573,6 @@ export default function ProfilePage() {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       required
-                      className="backdrop-blur-sm bg-white/30 border border-gray-200 shadow-sm"
                     />
                   </div>
 
@@ -573,7 +592,6 @@ export default function ProfilePage() {
                           }
                         }}
                         required
-                        className="backdrop-blur-sm bg-white/30 border border-gray-200 shadow-sm"
                         disabled={emailOtpVerified}
                       />
                       {!emailOtpVerified ? (
@@ -601,7 +619,6 @@ export default function ProfilePage() {
                           placeholder="Enter OTP sent to your email"
                           value={emailOtp}
                           onChange={(e) => setEmailOtp(e.target.value)}
-                          className="backdrop-blur-sm bg-white/30 border border-gray-200 shadow-sm"
                         />
                         <Button type="button" onClick={verifyEmailOtp}>
                           Verify
@@ -619,7 +636,6 @@ export default function ProfilePage() {
                       value={storeName}
                       onChange={(e) => setStoreName(e.target.value)}
                       required
-                      className="backdrop-blur-sm bg-white/30 border border-gray-200 shadow-sm"
                     />
                   </div>
 
@@ -632,7 +648,6 @@ export default function ProfilePage() {
                       value={storeAddress}
                       onChange={(e) => setStoreAddress(e.target.value)}
                       required
-                      className="backdrop-blur-sm bg-white/30 border border-gray-200 shadow-sm"
                     />
                   </div>
 
@@ -687,7 +702,6 @@ export default function ProfilePage() {
                       value={currentPassword}
                       onChange={(e) => setCurrentPassword(e.target.value)}
                       required
-                      className="backdrop-blur-sm bg-white/30 border border-gray-200 shadow-sm"
                     />
                   </div>
                   <div className="space-y-2">
@@ -698,7 +712,6 @@ export default function ProfilePage() {
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       required
-                      className="backdrop-blur-sm bg-white/30 border border-gray-200 shadow-sm"
                     />
                     <p className="text-xs text-gray-500">
                       Password must be at least 8 characters long and contain at least one uppercase letter, one
@@ -713,7 +726,6 @@ export default function ProfilePage() {
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       required
-                      className="backdrop-blur-sm bg-white/30 border border-gray-200 shadow-sm"
                     />
                   </div>
                   <Button type="submit" disabled={loading}>

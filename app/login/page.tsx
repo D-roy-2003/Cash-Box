@@ -50,7 +50,7 @@ export default function LoginPage() {
       localStorage.setItem("currentUser", JSON.stringify({ ...userInfo, token }))
 
       // Redirect to dashboard
-      router.push("/dashboard")
+      router.push("/")
     } catch (err: any) {
       setError(err.message || "An unexpected error occurred")
     } finally {
