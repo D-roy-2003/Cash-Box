@@ -31,7 +31,7 @@ export default function LoginPage() {
     setError("")
 
     try {
-      const response = await fetch("/api/login", {
+      const response = await fetch(`${window.location.origin}/api/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

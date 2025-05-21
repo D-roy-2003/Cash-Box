@@ -19,10 +19,12 @@ import { ArrowLeft, AlertCircle } from "lucide-react"
 
 export default function SignupPage() {
   const router = useRouter()
-  const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: ""
+  })
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -31,9 +33,14 @@ export default function SignupPage() {
     if (!/[A-Z]/.test(pwd)) return "Password must contain at least one uppercase letter"
     if (!/[a-z]/.test(pwd)) return "Password must contain at least one lowercase letter"
     if (!/[0-9]/.test(pwd)) return "Password must contain at least one digit"
-    if (!/[!@#$%^&*()_+\-=[\]{};':\"\\|,.<>/?]/.test(pwd))
+    if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(pwd))
       return "Password must contain at least one special character"
     return ""
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { id, value } = e.target
+    setFormData(prev => ({ ...prev, [id]: value }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,6 +48,9 @@ export default function SignupPage() {
     setError("")
     setLoading(true)
 
+    const { name, email, password, confirmPassword } = formData
+
+    // Validation
     if (!name.trim() || !email.trim() || !password || !confirmPassword) {
       setError("All fields are required")
       setLoading(false)
@@ -61,24 +71,32 @@ export default function SignupPage() {
     }
 
     try {
-      const response = await fetch("/api/signup", {
+      const response = await fetch(`${window.location.origin}/api/signup`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify({ name, email, password }),
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Signup failed")
+      // Check content type before parsing
+      const contentType = response.headers.get("content-type")
+      if (!contentType?.includes("application/json")) {
+        const text = await response.text()
+        throw new Error(`Server returned ${response.status} ${response.statusText}`)
       }
 
-      const userData = await response.json()
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Signup failed")
+      }
 
-      // Store user in localStorage (exclude password)
-      localStorage.setItem("currentUser", JSON.stringify(userData))
-
+      localStorage.setItem("currentUser", JSON.stringify(data))
       router.push("/")
     } catch (err: any) {
+      console.error("Signup error:", err)
       setError(err.message || "An unexpected error occurred")
     } finally {
       setLoading(false)
@@ -120,10 +138,9 @@ export default function SignupPage() {
                 <Input
                   id="name"
                   placeholder="John Doe"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  value={formData.name}
+                  onChange={handleChange}
                   required
-                  className="backdrop-blur-sm bg-white/30 border border-gray-200 shadow-sm"
                 />
               </div>
 
@@ -133,10 +150,9 @@ export default function SignupPage() {
                   id="email"
                   type="email"
                   placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={formData.email}
+                  onChange={handleChange}
                   required
-                  className="backdrop-blur-sm bg-white/30 border border-gray-200 shadow-sm"
                 />
               </div>
 
@@ -145,10 +161,9 @@ export default function SignupPage() {
                 <Input
                   id="password"
                   type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  value={formData.password}
+                  onChange={handleChange}
                   required
-                  className="backdrop-blur-sm bg-white/30 border border-gray-200 shadow-sm"
                 />
                 <p className="text-xs text-gray-500">
                   Password must be at least 8 characters long and contain at least one uppercase letter,
@@ -161,10 +176,9 @@ export default function SignupPage() {
                 <Input
                   id="confirmPassword"
                   type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
                   required
-                  className="backdrop-blur-sm bg-white/30 border border-gray-200 shadow-sm"
                 />
               </div>
 

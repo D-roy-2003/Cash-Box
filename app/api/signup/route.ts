@@ -1,8 +1,6 @@
-// app/api/signup/route.ts
 import { NextResponse } from "next/server";
-import mysql from "mysql2/promise";
-import bcrypt from "bcryptjs";
 import { pool } from "@/lib/database";
+import bcrypt from "bcryptjs";
 
 interface SignupRequestBody {
   name: string;
@@ -12,79 +10,80 @@ interface SignupRequestBody {
 
 export async function POST(request: Request) {
   let connection;
-
   try {
-    const { name, email, password } =
-      (await request.json()) as SignupRequestBody;
+    // Verify content type
+    const contentType = request.headers.get("content-type");
+    if (!contentType?.includes("application/json")) {
+      return NextResponse.json(
+        { error: "Invalid content type" },
+        { status: 415 }
+      );
+    }
 
-    if (!name || !email || !password) {
+    const { name, email, password } = await request.json() as SignupRequestBody;
+
+    // Validate input
+    if (!name?.trim() || !email?.trim() || !password) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
       );
     }
 
-    const connection = await pool.getConnection();
+    connection = await pool.getConnection();
 
-    // Check if user already exists
+    // Check for existing user
     const [existing] = await connection.execute(
       "SELECT id FROM users WHERE email = ?",
       [email]
     );
 
-    // `existing` can be typed as RowDataPacket[] but to be safe:
     if (Array.isArray(existing) && existing.length > 0) {
-      await connection.release();
       return NextResponse.json(
         { error: "Email already exists" },
         { status: 409 }
       );
     }
 
-    // Hash the password
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Insert new user
+    // Create user
     const [result] = await connection.execute(
       "INSERT INTO users (name, email, password) VALUES (?, ?, ?)",
-      [name, email, hashedPassword]
+      [name.trim(), email.trim(), hashedPassword]
     );
 
-    // `result` type is ResultSetHeader in mysql2
     const insertId = (result as any).insertId;
     if (!insertId) {
-      await connection.release();
       return NextResponse.json(
         { error: "Failed to create user" },
         { status: 500 }
       );
     }
 
-    // Initialize account balance for the new user
+    // Initialize account
     await connection.execute(
       "INSERT INTO account_balances (user_id, balance) VALUES (?, ?)",
       [insertId, 0]
     );
 
-    await connection.release();
-
     return NextResponse.json(
       {
         id: insertId,
-        name,
-        email,
+        name: name.trim(),
+        email: email.trim(),
         createdAt: new Date().toISOString(),
       },
       { status: 201 }
     );
   } catch (error) {
-    if (connection) {
-      await connection.release();
-    }
     console.error("Signup error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
     );
+  } finally {
+    if (connection) await connection.release();
   }
 }
