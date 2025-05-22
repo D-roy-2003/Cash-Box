@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, AlertCircle, AlertTriangle, User, Upload, Check, X, LogOut } from "lucide-react"
+import { ArrowLeft, AlertCircle, User, Upload, X, LogOut } from "lucide-react"
 import { PhoneInput } from "@/components/phone-input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ImageViewer } from "@/components/image-viewer"
@@ -23,21 +23,19 @@ import {
 interface UserProfile {
   id: string
   name: string
-  email: string
   createdAt: string
   storeName: string
   storeAddress: string
   storeContact: string
   storeCountryCode: string
   profilePhoto?: string | null
-  emailVerified: boolean
+  isProfileComplete: boolean;
 }
 
 export default function ProfilePage() {
   const router = useRouter()
   const [user, setUser] = useState<UserProfile | null>(null)
   const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -52,36 +50,43 @@ export default function ProfilePage() {
   const [showProfileAlert, setShowProfileAlert] = useState(false)
   const [redirectFrom, setRedirectFrom] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
-  // Email verification states
-  const [emailOtp, setEmailOtp] = useState("")
-  const [emailOtpSent, setEmailOtpSent] = useState(false)
-  const [emailOtpVerified, setEmailOtpVerified] = useState(false)
-  const [generatedEmailOtp, setGeneratedEmailOtp] = useState("")
-
-  // Profile photo
+  // Profile photo states
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false)
 
+  const checkProfileCompletion = useCallback((profileData: Partial<UserProfile>): boolean => {
+    return !!(
+      profileData.name &&
+      profileData.storeName &&
+      profileData.storeAddress &&
+      profileData.storeContact &&
+      /^\d{10}$/.test(profileData.storeContact)
+    )
+  }, [])
+
   const setUserState = useCallback((userData: UserProfile) => {
-    setUser(userData)
+    const isComplete = checkProfileCompletion(userData)
+    setUser({ ...userData, isProfileComplete: isComplete })
     setName(userData.name || "")
-    setEmail(userData.email || "")
     setStoreName(userData.storeName || "")
     setStoreAddress(userData.storeAddress || "")
     setStoreContact(userData.storeContact || "")
     setStoreCountryCode(userData.storeCountryCode || "+91")
-    setEmailOtpVerified(userData.emailVerified)
     setProfilePhoto(userData.profilePhoto || null)
-  }, [])
+  }, [checkProfileCompletion])
 
   useEffect(() => {
     let isMounted = true
     
     const fetchProfile = async () => {
       try {
+        setIsLoading(true)
+        setFetchError(null)
+        
         const userJSON = localStorage.getItem('currentUser')
         if (!userJSON) {
           router.push('/login')
@@ -89,30 +94,38 @@ export default function ProfilePage() {
         }
 
         const user = JSON.parse(userJSON)
-        const response = await fetch('/api/profile', {
-          headers: { Authorization: `Bearer ${user.token}` }
-        })
         
+        const response = await fetch('/api/profile', {
+          method: 'GET',
+          headers: { 
+            Authorization: `Bearer ${user.token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+
         if (!response.ok) {
-          throw new Error('Failed to fetch profile')
+          if (response.status === 401) {
+            localStorage.removeItem('currentUser')
+            router.push('/login')
+            return
+          }
+          throw new Error(`Failed to fetch profile: ${response.status}`)
         }
         
         const userData = await response.json()
         
         if (isMounted) {
           setUserState(userData)
-
-          const urlParams = new URLSearchParams(window.location.search)
-          const from = urlParams.get("from")
+          const from = new URLSearchParams(window.location.search).get("from")
           if (from) {
             setRedirectFrom(from)
-            setShowProfileAlert(true)
+            setShowProfileAlert(!userData.isProfileComplete)
           }
         }
-      } catch (error) {
-        console.error('Error fetching profile:', error)
+      } catch (error: any) {
         if (isMounted) {
-          router.push('/login')
+          setFetchError(error.message || 'Failed to load profile data')
+          console.error('Profile fetch error:', error)
         }
       } finally {
         if (isMounted) {
@@ -127,6 +140,53 @@ export default function ProfilePage() {
       isMounted = false
     }
   }, [router, setUserState])
+
+  useEffect(() => {
+    if (user) {
+      const isComplete = checkProfileCompletion({
+        name,
+        storeName,
+        storeAddress,
+        storeContact
+      })
+      if (isComplete !== user.isProfileComplete) {
+        updateProfileCompletionStatus(isComplete)
+      }
+      if (showProfileAlert && isComplete) {
+        setShowProfileAlert(false)
+      }
+    }
+  }, [name, storeName, storeAddress, storeContact, user, showProfileAlert, checkProfileCompletion])
+
+  const updateProfileCompletionStatus = async (isComplete: boolean) => {
+    try {
+      const userJSON = localStorage.getItem('currentUser')
+      if (!userJSON) {
+        router.push('/login')
+        return
+      }
+
+      const currentUser = JSON.parse(userJSON)
+      
+      const response = await fetch('/api/profile/complete', {
+        method: 'PUT',
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentUser.token}`
+        },
+        body: JSON.stringify({ isProfileComplete: isComplete })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update profile completion status')
+      }
+
+      const updatedProfile = await response.json()
+      setUser(prev => prev ? { ...prev, isProfileComplete: isComplete } : null)
+    } catch (error) {
+      console.error('Error updating profile completion:', error)
+    }
+  }
 
   const validateContact = (contact: string): boolean => {
     if (!contact) {
@@ -145,17 +205,6 @@ export default function ProfilePage() {
     setStoreContact(value || "")
     setStoreCountryCode(countryCode || "+91")
     validateContact(value)
-  }
-
-  const isProfileComplete = (): boolean => {
-    return !!(
-      name &&
-      storeName &&
-      storeAddress &&
-      storeContact &&
-      /^\d{10}$/.test(storeContact) &&
-      emailOtpVerified
-    )
   }
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -209,6 +258,13 @@ export default function ProfilePage() {
         photoUrl = null
       }
 
+      const isComplete = checkProfileCompletion({
+        name,
+        storeName,
+        storeAddress,
+        storeContact
+      })
+
       const profileData = {
         name,
         storeName,
@@ -216,7 +272,7 @@ export default function ProfilePage() {
         storeContact,
         storeCountryCode,
         profilePhoto: photoUrl,
-        emailVerified: emailOtpVerified
+        isProfileComplete: isComplete
       }
 
       const response = await fetch('/api/profile', {
@@ -342,66 +398,8 @@ export default function ProfilePage() {
     router.push("/login")
   }
 
-  const sendEmailOtp = () => {
-    const otp = Math.floor(100000 + Math.random() * 900000).toString()
-    setGeneratedEmailOtp(otp)
-    setEmailOtpSent(true)
-    alert(`For demo purposes, your email OTP is: ${otp}`)
-  }
-
-  const verifyEmailOtp = async () => {
-    if (emailOtp === generatedEmailOtp) {
-      try {
-        setEmailOtpVerified(true)
-        setSuccess("Email verification in progress...")
-        
-        const userJSON = localStorage.getItem('currentUser')
-        if (!userJSON) {
-          router.push('/login')
-          return
-        }
-
-        const currentUser = JSON.parse(userJSON)
-        
-        const response = await fetch('/api/profile', {
-          method: 'PUT',
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${currentUser.token}`
-          },
-          body: JSON.stringify({
-            name,
-            storeName,
-            storeAddress,
-            storeContact,
-            storeCountryCode,
-            profilePhoto,
-            emailVerified: true
-          })
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to update verification status')
-        }
-
-        const updatedProfile = await response.json()
-        setUserState(updatedProfile.updatedProfile)
-        setSuccess("Email verified successfully")
-        setError("")
-      } catch (error: any) {
-        console.error('Verification update error:', error)
-        setError(error.message || 'Failed to update verification status')
-        setEmailOtpVerified(false)
-      }
-    } else {
-      setError("Incorrect OTP. Please check and try again.")
-    }
-  }
-
   const handleProfilePhotoClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click()
-    }
+    fileInputRef.current?.click()
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -446,6 +444,32 @@ export default function ProfilePage() {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    )
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle>Profile Error</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{fetchError}</AlertDescription>
+            </Alert>
+            <div className="mt-4 flex justify-center">
+              <Button onClick={() => window.location.reload()}>Retry</Button>
+            </div>
+            <div className="mt-2 text-center">
+              <Button variant="link" onClick={() => router.push('/login')}>
+                Or go to login page
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -501,9 +525,9 @@ export default function ProfilePage() {
       </div>
 
       <div className="max-w-4xl mx-auto space-y-8">
-        {showProfileAlert && (
+        {showProfileAlert && !user.isProfileComplete && (
           <Alert className="bg-amber-50 border-amber-200 text-amber-800">
-            <AlertTriangle className="h-4 w-4 text-amber-800" />
+            <AlertCircle className="h-4 w-4 text-amber-800" />
             <AlertDescription>
               Please complete your profile details before accessing{" "}
               {redirectFrom === "/create" ? "receipt creation" : "accounts"}.
@@ -557,7 +581,6 @@ export default function ProfilePage() {
               </div>
               <div>
                 <CardTitle className="text-2xl">{user.name}</CardTitle>
-                <CardDescription>{user.email}</CardDescription>
                 <p className="text-sm text-gray-500">
                   Member since {new Date(user.createdAt).toLocaleDateString()}
                 </p>
@@ -607,63 +630,6 @@ export default function ProfilePage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="email">
-                      Email <span className="text-red-500">*</span>
-                      {emailOtpVerified && (
-                        <span className="ml-2 text-green-600 text-sm flex items-center">
-                          <Check className="h-4 w-4 mr-1" /> Verified
-                        </span>
-                      )}
-                    </Label>
-                    <div className="flex space-x-2">
-                      <Input
-                        id="email"
-                        type="email"
-                        value={email}
-                        onChange={(e) => {
-                          setEmail(e.target.value)
-                          if (emailOtpVerified) {
-                            setEmailOtpVerified(false)
-                          }
-                        }}
-                        required
-                        disabled={emailOtpVerified}
-                      />
-                      {!emailOtpVerified ? (
-                        <Button 
-                          type="button" 
-                          onClick={sendEmailOtp} 
-                          disabled={!email || !email.includes("@")}
-                        >
-                          {emailOtpSent ? "Resend OTP" : "Send OTP"}
-                        </Button>
-                      ) : (
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          className="bg-green-50 text-green-600 border-green-200"
-                          disabled
-                        >
-                          <Check className="mr-2 h-4 w-4" /> Verified
-                        </Button>
-                      )}
-                    </div>
-
-                    {emailOtpSent && !emailOtpVerified && (
-                      <div className="mt-2 flex space-x-2">
-                        <Input
-                          placeholder="Enter OTP sent to your email"
-                          value={emailOtp}
-                          onChange={(e) => setEmailOtp(e.target.value)}
-                        />
-                        <Button type="button" onClick={verifyEmailOtp}>
-                          Verify
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
                     <Label htmlFor="storeName">
                       Store/Enterprise Name <span className="text-red-500">*</span>
                     </Label>
@@ -702,7 +668,7 @@ export default function ProfilePage() {
                     {contactError && <p className="text-sm text-red-500">{contactError}</p>}
                   </div>
 
-                  <Button type="submit" disabled={loading || !emailOtpVerified}>
+                  <Button type="submit" disabled={loading}>
                     {loading ? "Updating..." : "Update Profile"}
                   </Button>
                 </form>

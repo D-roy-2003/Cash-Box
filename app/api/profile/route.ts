@@ -1,3 +1,4 @@
+// app/api/profile/route.ts
 import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
 import { pool } from "@/lib/database";
@@ -12,6 +13,7 @@ interface UserProfile {
   storeContact: string;
   storeCountryCode: string;
   profilePhoto?: string | null;
+  isProfileComplete: boolean;
 }
 
 interface UpdateProfilePayload {
@@ -25,6 +27,7 @@ interface UpdateProfilePayload {
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
+
   if (!authHeader?.startsWith("Bearer ")) {
     return NextResponse.json(
       { error: "Authorization header missing or invalid" },
@@ -50,7 +53,8 @@ export async function GET(request: Request) {
         store_address AS storeAddress, 
         store_contact AS storeContact, 
         store_country_code AS storeCountryCode, 
-        profile_photo AS profilePhoto 
+        profile_photo AS profilePhoto,
+        profile_complete AS isProfileComplete
        FROM users 
        WHERE id = ? LIMIT 1`,
       [decoded.userId]
@@ -76,6 +80,7 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   const authHeader = request.headers.get("authorization");
+
   if (!authHeader?.startsWith("Bearer ")) {
     return NextResponse.json(
       { error: "Authorization header missing or invalid" },
@@ -102,12 +107,13 @@ export async function PUT(request: Request) {
 
     const updateData: UpdateProfilePayload = await request.json();
 
+    // Validate all mandatory fields
     const requiredFields = [
       "name",
       "storeName",
       "storeAddress",
       "storeContact",
-      "storeCountryCode"
+      "storeCountryCode",
     ];
 
     const missingFields = requiredFields.filter(
@@ -121,6 +127,19 @@ export async function PUT(request: Request) {
       );
     }
 
+    // Additional validation for store contact (10 digits)
+    if (!/^\d{10}$/.test(updateData.storeContact)) {
+      return NextResponse.json(
+        { error: "Store contact must be exactly 10 digits" },
+        { status: 400 }
+      );
+    }
+
+    // Determine if profile is complete
+    const isProfileComplete = requiredFields.every(
+      (field) => updateData[field as keyof UpdateProfilePayload]
+    );
+
     connection = await pool.getConnection();
 
     const [result]: any = await connection.query(
@@ -130,7 +149,8 @@ export async function PUT(request: Request) {
         store_address = ?, 
         store_contact = ?, 
         store_country_code = ?, 
-        profile_photo = ?
+        profile_photo = ?,
+        profile_complete = ?
        WHERE id = ?`,
       [
         updateData.name,
@@ -139,7 +159,8 @@ export async function PUT(request: Request) {
         updateData.storeContact,
         updateData.storeCountryCode,
         updateData.profilePhoto || null,
-        decoded.userId
+        isProfileComplete ? 1 : 0,
+        decoded.userId,
       ]
     );
 
@@ -150,13 +171,16 @@ export async function PUT(request: Request) {
       );
     }
 
+    // Get the updated user profile
     const [updatedUser] = await connection.query(
       `SELECT 
-        name, store_name AS storeName, 
+        id, name, email,
+        store_name AS storeName, 
         store_address AS storeAddress, 
         store_contact AS storeContact, 
         store_country_code AS storeCountryCode, 
-        profile_photo AS profilePhoto 
+        profile_photo AS profilePhoto,
+        profile_complete AS isProfileComplete
        FROM users 
        WHERE id = ? LIMIT 1`,
       [decoded.userId]
@@ -165,10 +189,63 @@ export async function PUT(request: Request) {
     return NextResponse.json({
       success: true,
       updatedProfile: (updatedUser as UserProfile[])[0],
+      isProfileComplete
     });
 
   } catch (error) {
     console.error("PUT /profile error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Update failed" },
+      { status: 500 }
+    );
+  } finally {
+    if (connection) await connection.release();
+  }
+}
+
+// Add this endpoint to handle just the completion status update
+export async function PATCH(request: Request) {
+  const authHeader = request.headers.get("authorization");
+
+  if (!authHeader?.startsWith("Bearer ")) {
+    return NextResponse.json(
+      { error: "Authorization header missing or invalid" },
+      { status: 401 }
+    );
+  }
+
+  const token = authHeader.split(" ")[1];
+  let connection: mysql.PoolConnection | undefined;
+
+  try {
+    const decoded = await verifyJwt(token);
+    if (!decoded?.userId) {
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    }
+
+    const { isProfileComplete } = await request.json();
+
+    connection = await pool.getConnection();
+
+    const [result]: any = await connection.query(
+      `UPDATE users SET profile_complete = ? WHERE id = ?`,
+      [isProfileComplete ? 1 : 0, decoded.userId]
+    );
+
+    if (result.affectedRows === 0) {
+      return NextResponse.json(
+        { error: "User not found or no changes made" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      isProfileComplete
+    });
+
+  } catch (error) {
+    console.error("PATCH /profile/complete error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Update failed" },
       { status: 500 }
