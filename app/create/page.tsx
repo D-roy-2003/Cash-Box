@@ -23,8 +23,8 @@ import { z } from "zod";
 // Define validation schemas
 const ReceiptItemSchema = z.object({
   description: z.string().min(1, "Description is required"),
-  quantity: z.number().min(1, "Quantity must be at least 1"),
-  price: z.number().min(0, "Price cannot be negative"),
+  quantity: z.number().int().min(1, "Quantity must be at least 1"),
+  price: z.number().min(0.01, "Price must be at least ₹0.01"),
   advanceAmount: z.number().min(0).optional(),
   dueAmount: z.number().min(0).optional(),
 });
@@ -550,6 +550,7 @@ export default function CreateReceipt() {
                       }
                       placeholder="Item description"
                       required
+                      type="text"
                     />
                     {errors[`items.${index}.description`] && (
                       <p className="text-xs text-red-500">
@@ -565,10 +566,16 @@ export default function CreateReceipt() {
                       type="number"
                       min="1"
                       value={item.quantity}
-                      onChange={(e) =>
-                        updateItem(index, "quantity", e.target.value)
-                      }
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value);
+                        // Prevent values less than 1
+                        updateItem(index, "quantity", Math.max(value || 1, 1));
+                      }}
                       required
+                      onKeyDown={(e) => {
+                        // Prevent negative sign input
+                        if (e.key === "-" || e.key === "e") e.preventDefault();
+                      }}
                     />
                     {errors[`items.${index}.quantity`] && (
                       <p className="text-xs text-red-500">
@@ -583,12 +590,18 @@ export default function CreateReceipt() {
                       id={`item-${index}-price`}
                       type="number"
                       min="0"
-                      step="0.01"
+                      step="1"
                       value={item.price}
-                      onChange={(e) =>
-                        updateItem(index, "price", e.target.value)
-                      }
+                      onChange={(e) => {
+                        const value = parseFloat(e.target.value);
+                        // Allow decimal values but prevent negative numbers
+                        updateItem(index, "price", Math.max(value || 0, 0));
+                      }}
                       required
+                      onKeyDown={(e) => {
+                        // Prevent negative sign input
+                        if (e.key === "-") e.preventDefault();
+                      }}
                     />
                     {errors[`items.${index}.price`] && (
                       <p className="text-xs text-red-500">
