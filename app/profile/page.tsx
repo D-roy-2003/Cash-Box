@@ -30,7 +30,7 @@ interface UserProfile {
   storeContact: string
   storeCountryCode: string
   profilePhoto?: string | null
-  emailVerified?: boolean
+  emailVerified: boolean
 }
 
 export default function ProfilePage() {
@@ -73,7 +73,7 @@ export default function ProfilePage() {
     setStoreAddress(userData.storeAddress || "")
     setStoreContact(userData.storeContact || "")
     setStoreCountryCode(userData.storeCountryCode || "+91")
-    setEmailOtpVerified(!!userData.emailVerified)
+    setEmailOtpVerified(userData.emailVerified)
     setProfilePhoto(userData.profilePhoto || null)
   }, [])
 
@@ -102,7 +102,6 @@ export default function ProfilePage() {
         if (isMounted) {
           setUserState(userData)
 
-          // Check if redirected from another page
           const urlParams = new URLSearchParams(window.location.search)
           const from = urlParams.get("from")
           if (from) {
@@ -167,7 +166,6 @@ export default function ProfilePage() {
 
     if (!user) return
 
-    // Validate required fields
     if (!name || !storeName || !storeAddress || !storeContact || !storeCountryCode) {
       setError("Please fill in all required fields")
       setLoading(false)
@@ -188,7 +186,6 @@ export default function ProfilePage() {
 
       const currentUser = JSON.parse(userJSON)
       
-      // Handle file upload separately if a new file was selected
       let photoUrl = profilePhoto || null
       if (selectedFile) {
         const uploadFormData = new FormData()
@@ -209,11 +206,9 @@ export default function ProfilePage() {
         const uploadData = await uploadResponse.json()
         photoUrl = uploadData.url
       } else if (profilePhoto === null) {
-        // Explicitly indicate we want to remove the photo
         photoUrl = null
       }
 
-      // Send profile data as JSON
       const profileData = {
         name,
         storeName,
@@ -258,7 +253,6 @@ export default function ProfilePage() {
 
     if (!user) return
 
-    // Validate passwords
     if (!currentPassword || !newPassword || !confirmPassword) {
       setError("Please fill in all password fields")
       setLoading(false)
@@ -271,7 +265,6 @@ export default function ProfilePage() {
       return
     }
 
-    // Validate password strength
     if (newPassword.length <= 7) {
       setError("Password must be at least 8 characters long")
       setLoading(false)
@@ -356,11 +349,50 @@ export default function ProfilePage() {
     alert(`For demo purposes, your email OTP is: ${otp}`)
   }
 
-  const verifyEmailOtp = () => {
+  const verifyEmailOtp = async () => {
     if (emailOtp === generatedEmailOtp) {
-      setEmailOtpVerified(true)
-      setSuccess("Email verified successfully")
-      setError("")
+      try {
+        setEmailOtpVerified(true)
+        setSuccess("Email verification in progress...")
+        
+        const userJSON = localStorage.getItem('currentUser')
+        if (!userJSON) {
+          router.push('/login')
+          return
+        }
+
+        const currentUser = JSON.parse(userJSON)
+        
+        const response = await fetch('/api/profile', {
+          method: 'PUT',
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${currentUser.token}`
+          },
+          body: JSON.stringify({
+            name,
+            storeName,
+            storeAddress,
+            storeContact,
+            storeCountryCode,
+            profilePhoto,
+            emailVerified: true
+          })
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to update verification status')
+        }
+
+        const updatedProfile = await response.json()
+        setUserState(updatedProfile.updatedProfile)
+        setSuccess("Email verified successfully")
+        setError("")
+      } catch (error: any) {
+        console.error('Verification update error:', error)
+        setError(error.message || 'Failed to update verification status')
+        setEmailOtpVerified(false)
+      }
     } else {
       setError("Incorrect OTP. Please check and try again.")
     }
@@ -375,13 +407,11 @@ export default function ProfilePage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      // Validate file type
       if (!file.type.startsWith('image/')) {
         setError("Please select an image file")
         return
       }
 
-      // Validate file size (5MB max)
       if (file.size > 5 * 1024 * 1024) {
         setError("File size too large. Maximum 5MB allowed.")
         return
@@ -579,6 +609,11 @@ export default function ProfilePage() {
                   <div className="space-y-2">
                     <Label htmlFor="email">
                       Email <span className="text-red-500">*</span>
+                      {emailOtpVerified && (
+                        <span className="ml-2 text-green-600 text-sm flex items-center">
+                          <Check className="h-4 w-4 mr-1" /> Verified
+                        </span>
+                      )}
                     </Label>
                     <div className="flex space-x-2">
                       <Input
@@ -600,13 +635,14 @@ export default function ProfilePage() {
                           onClick={sendEmailOtp} 
                           disabled={!email || !email.includes("@")}
                         >
-                          Send OTP
+                          {emailOtpSent ? "Resend OTP" : "Send OTP"}
                         </Button>
                       ) : (
                         <Button 
                           type="button" 
                           variant="outline" 
                           className="bg-green-50 text-green-600 border-green-200"
+                          disabled
                         >
                           <Check className="mr-2 h-4 w-4" /> Verified
                         </Button>
