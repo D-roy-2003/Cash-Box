@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/database";
 import bcrypt from "bcryptjs";
+import { initializeDatabase } from "@/lib/database";
 
 interface SignupRequestBody {
   name: string;
@@ -9,6 +10,7 @@ interface SignupRequestBody {
 }
 
 export async function POST(request: Request) {
+  await initializeDatabase();
   let connection;
   try {
     // Verify content type
@@ -20,7 +22,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const { name, email, password } = await request.json() as SignupRequestBody;
+    const { name, email, password } =
+      (await request.json()) as SignupRequestBody;
 
     // Validate input
     if (!name?.trim() || !email?.trim() || !password) {

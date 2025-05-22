@@ -4,6 +4,7 @@ import mysql from "mysql2/promise";
 import bcrypt from "bcryptjs";
 import { pool } from "@/lib/database";
 import { signJwt } from "@/lib/auth";
+import { initializeDatabase } from "@/lib/database";
 
 // Type definitions
 interface User {
@@ -26,6 +27,7 @@ interface LoginResponse {
 }
 
 export async function POST(request: Request) {
+  await initializeDatabase();
   // Validate request body
   let credentials: LoginRequest;
   try {
@@ -49,10 +51,10 @@ export async function POST(request: Request) {
     connection = await pool.getConnection();
 
     // Type-safe query with proper MySQL2 typing
-    const [rows] = await connection.query(
+    const [rows] = (await connection.query(
       `SELECT id, name, email, password FROM users WHERE email = ? LIMIT 1`,
       [credentials.email]
-    ) as [User[], mysql.FieldPacket[]];
+    )) as [User[], mysql.FieldPacket[]];
 
     // Verify user exists
     if (rows.length === 0) {
@@ -65,7 +67,10 @@ export async function POST(request: Request) {
     const user = rows[0];
 
     // Verify password
-    const isValidPassword = await bcrypt.compare(credentials.password, user.password);
+    const isValidPassword = await bcrypt.compare(
+      credentials.password,
+      user.password
+    );
     if (!isValidPassword) {
       return NextResponse.json(
         { error: "Invalid credentials" },

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
 import { pool } from "@/lib/database";
 import { verifyJwt } from "@/lib/auth";
+import { initializeDatabase } from "@/lib/database";
 
 interface UserProfile {
   id: string | number;
@@ -26,6 +27,7 @@ interface UpdateProfilePayload {
 }
 
 export async function GET(request: Request) {
+  await initializeDatabase();
   const authHeader = request.headers.get("authorization");
 
   if (!authHeader?.startsWith("Bearer ")) {
@@ -66,7 +68,6 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(user);
-
   } catch (error) {
     console.error("GET /profile error:", error);
     return NextResponse.json(
@@ -79,6 +80,7 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  await initializeDatabase();
   const authHeader = request.headers.get("authorization");
 
   if (!authHeader?.startsWith("Bearer ")) {
@@ -189,9 +191,8 @@ export async function PUT(request: Request) {
     return NextResponse.json({
       success: true,
       updatedProfile: (updatedUser as UserProfile[])[0],
-      isProfileComplete
+      isProfileComplete,
     });
-
   } catch (error) {
     console.error("PUT /profile error:", error);
     return NextResponse.json(
@@ -205,6 +206,7 @@ export async function PUT(request: Request) {
 
 // Add this endpoint to handle just the completion status update
 export async function PATCH(request: Request) {
+  await initializeDatabase();
   const authHeader = request.headers.get("authorization");
 
   if (!authHeader?.startsWith("Bearer ")) {
@@ -241,9 +243,8 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({
       success: true,
-      isProfileComplete
+      isProfileComplete,
     });
-
   } catch (error) {
     console.error("PATCH /profile/complete error:", error);
     return NextResponse.json(
