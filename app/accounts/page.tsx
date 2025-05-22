@@ -34,15 +34,19 @@ export default function AccountsPage() {
 
       const userData = JSON.parse(userJSON);
 
-      // Check if profile is complete
-      if (userData.profileComplete) {
-        router.push("/profile?from=/accounts");
-        return;
-      }
-
-      setUser(userData);
-
       try {
+        // Check profile completion
+        const profileRes = await fetch("/api/profile", {
+          headers: { Authorization: `Bearer ${userData.token}` },
+        });
+        if (!profileRes.ok) throw new Error("Failed to fetch profile");
+        const profile = await profileRes.json();
+
+        if (!profile.isProfileComplete) {
+          router.push("/profile?from=/accounts");
+          return;
+        }
+
         const response = await fetch("/api/transactions", {
           headers: { Authorization: `Bearer ${userData.token}` },
         });
@@ -62,6 +66,7 @@ export default function AccountsPage() {
           "totalDueBalance",
           data.totalDueBalance.toString()
         );
+        setUser(profile);
       } catch (error) {
         console.error("Failed to fetch data:", error);
       }

@@ -95,14 +95,35 @@ export default function CreateReceipt() {
 
       const userData = JSON.parse(userJSON);
 
-      // Check if profile is complete
-      if (userData.profileComplete) {
-        router.push("/profile?from=/receipts/create");
-        return;
-      }
+      try {
+        // Check profile completion
+        const profileRes = await fetch("/api/profile", {
+          headers: { Authorization: `Bearer ${userData.token}` },
+        });
+        if (!profileRes.ok) throw new Error("Failed to fetch profile");
+        const profile = await profileRes.json();
 
-      setUser(userData);
-      await generateReceiptNumber(userData.token);
+        if (!profile.isProfileComplete) {
+          router.push("/profile?from=/create");
+          return;
+        }
+
+        // Generate receipt number
+        const receiptRes = await fetch("/api/receipts/next-number", {
+          headers: { Authorization: `Bearer ${userData.token}` },
+        });
+        if (!receiptRes.ok)
+          throw new Error("Failed to generate receipt number");
+        const { receiptNumber } = await receiptRes.json();
+
+        setReceiptData((prev) => ({ ...prev, receiptNumber }));
+        setUser(profile);
+      } catch (error) {
+        console.error("Initialization error:", error);
+        setErrors(error.message || "Initialization failed");
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     initialize();

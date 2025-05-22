@@ -324,6 +324,9 @@ export default function ProfilePage() {
       setSuccess("Profile updated successfully");
       setUserState(updatedProfile.updatedProfile);
       setSelectedFile(null);
+      if (updatedProfile.isProfileComplete && redirectFrom) {
+        router.push(redirectFrom);
+      }
     } catch (error: any) {
       console.error("Update profile error:", error);
       setError(error.message || "Failed to update profile");
