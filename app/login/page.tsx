@@ -1,34 +1,41 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, AlertCircle } from "lucide-react"
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ArrowLeft, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
-  const router = useRouter()
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   // Redirect to home if already logged in
   useEffect(() => {
-    const user = localStorage.getItem("currentUser")
+    const user = localStorage.getItem("currentUser");
     if (user) {
-      router.push("/")
+      router.push("/");
     }
-  }, [router])
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError("")
+    e.preventDefault();
+    setLoading(true);
+    setError("");
 
     try {
       const response = await fetch(`${window.location.origin}/api/login`, {
@@ -37,26 +44,37 @@ export default function LoginPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ email, password }),
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Login failed")
+        throw new Error(data.error || "Login failed");
       }
 
-      // Store only necessary user details and token
-      const { token, ...userInfo } = data
-      localStorage.setItem("currentUser", JSON.stringify({ ...userInfo, token }))
+      // Verify token exists before storing
+      if (!data.token) {
+        throw new Error("No token received");
+      }
+
+      localStorage.setItem(
+        "currentUser",
+        JSON.stringify({
+          id: data.id,
+          name: data.name,
+          email: data.email,
+          token: data.token,
+        })
+      );
 
       // Redirect to dashboard
-      router.push("/")
+      router.push("/");
     } catch (err: any) {
-      setError(err.message || "An unexpected error occurred")
+      setError(err.message || "An unexpected error occurred");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
@@ -144,5 +162,5 @@ export default function LoginPage() {
         </Card>
       </div>
     </div>
-  )
+  );
 }

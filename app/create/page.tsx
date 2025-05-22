@@ -1,18 +1,24 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Trash2, ArrowLeft } from "lucide-react"
-import Link from "next/link"
-import { PhoneInput } from "@/components/phone-input"
-import { format } from "date-fns"
-import { z } from "zod"
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Plus, Trash2, ArrowLeft } from "lucide-react";
+import Link from "next/link";
+import { PhoneInput } from "@/components/phone-input";
+import { format } from "date-fns";
+import { z } from "zod";
 
 // Define validation schemas
 const ReceiptItemSchema = z.object({
@@ -21,13 +27,13 @@ const ReceiptItemSchema = z.object({
   price: z.number().min(0, "Price cannot be negative"),
   advanceAmount: z.number().min(0).optional(),
   dueAmount: z.number().min(0).optional(),
-})
+});
 
 const PaymentDetailsSchema = z.object({
   cardNumber: z.string().optional(),
   phoneNumber: z.string().optional(),
   phoneCountryCode: z.string().optional(),
-})
+});
 
 const ReceiptSchema = z.object({
   receiptNumber: z.string().min(1, "Receipt number is required"),
@@ -42,18 +48,18 @@ const ReceiptSchema = z.object({
   dueTotal: z.number().min(0),
   items: z.array(ReceiptItemSchema).min(1, "At least one item is required"),
   paymentDetails: PaymentDetailsSchema.optional(),
-})
+});
 
 interface ReceiptItem {
-  description: string
-  quantity: number
-  price: number
-  advanceAmount?: number
-  dueAmount?: number
+  description: string;
+  quantity: number;
+  price: number;
+  advanceAmount?: number;
+  dueAmount?: number;
 }
 
 export default function CreateReceipt() {
-  const router = useRouter()
+  const router = useRouter();
   const [receiptData, setReceiptData] = useState({
     receiptNumber: "",
     date: format(new Date(), "yyyy-MM-dd"),
@@ -66,173 +72,215 @@ export default function CreateReceipt() {
     items: [{ description: "", quantity: 1, price: 0 }] as ReceiptItem[],
     total: 0,
     dueTotal: 0,
-  })
+  });
 
   const [paymentDetails, setPaymentDetails] = useState<{
-    cardNumber?: string
-    phoneNumber?: string
-    phoneCountryCode?: string
-  }>({})
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
-  const [user, setUser] = useState<any>(null)
+    cardNumber?: string;
+    phoneNumber?: string;
+    phoneCountryCode?: string;
+  }>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
 
   // Authentication and initialization
   useEffect(() => {
     const initialize = async () => {
-      const userJSON = localStorage.getItem("currentUser")
+      const userJSON = localStorage.getItem("currentUser");
       if (!userJSON) {
-        router.push("/login")
-        return
+        router.push("/login");
+        return;
       }
 
-      const userData = JSON.parse(userJSON)
+      const userData = JSON.parse(userJSON);
 
       // Check if profile is complete
-      if (!userData.profileComplete) {
-        router.push("/profile?from=/receipts/create")
-        return
+      if (userData.profileComplete) {
+        router.push("/profile?from=/receipts/create");
+        return;
       }
 
-      setUser(userData)
-      await generateReceiptNumber(userData.token)
-    }
+      setUser(userData);
+      await generateReceiptNumber(userData.token);
+    };
 
-    initialize()
-  }, [router])
+    initialize();
+  }, [router]);
 
   const generateReceiptNumber = async (token: string) => {
     try {
-      const currentYear = new Date().getFullYear()
-      const response = await fetch(`/api/receipts/last-number?year=${currentYear}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      
-      if (!response.ok) throw new Error('Failed to fetch last receipt number')
-      
-      const data = await response.json()
-      const count = data.lastNumber + 1
+      const currentYear = new Date().getFullYear();
+      const response = await fetch(
+        `/api/receipts/last-number?year=${currentYear}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
-      const receiptNumber = `REC-${count.toString().padStart(4, "0")}`
-      setReceiptData(prev => ({ ...prev, receiptNumber }))
+      if (!response.ok) throw new Error("Failed to fetch last receipt number");
+
+      const data = await response.json();
+      const count = data.lastNumber + 1;
+
+      const receiptNumber = `REC-${count.toString().padStart(4, "0")}`;
+      setReceiptData((prev) => ({ ...prev, receiptNumber }));
     } catch (error) {
-      console.error('Error generating receipt number:', error)
+      console.error("Error generating receipt number:", error);
       // Fallback to local timestamp
-      const timestamp = Date.now().toString().slice(-4)
-      setReceiptData(prev => ({ ...prev, receiptNumber: `REC-${timestamp}` }))
+      const timestamp = Date.now().toString().slice(-4);
+      setReceiptData((prev) => ({
+        ...prev,
+        receiptNumber: `REC-${timestamp}`,
+      }));
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   // Calculate totals whenever items or payment status changes
   useEffect(() => {
-    const total = receiptData.items.reduce((sum, item) => sum + (item.quantity * item.price), 0)
-    let dueTotal = 0
+    const total = receiptData.items.reduce(
+      (sum, item) => sum + item.quantity * item.price,
+      0
+    );
+    let dueTotal = 0;
 
     if (receiptData.paymentStatus === "partial") {
-      dueTotal = total - receiptData.items.reduce((sum, item) => sum + (item.advanceAmount || 0), 0)
+      dueTotal =
+        total -
+        receiptData.items.reduce(
+          (sum, item) => sum + (item.advanceAmount || 0),
+          0
+        );
     } else if (receiptData.paymentStatus === "due") {
-      dueTotal = receiptData.items.reduce((sum, item) => sum + (item.dueAmount || 0), 0)
+      dueTotal = receiptData.items.reduce(
+        (sum, item) => sum + (item.dueAmount || 0),
+        0
+      );
     }
 
-    setReceiptData(prev => ({ ...prev, total, dueTotal }))
-  }, [receiptData.items, receiptData.paymentStatus])
+    setReceiptData((prev) => ({ ...prev, total, dueTotal }));
+  }, [receiptData.items, receiptData.paymentStatus]);
 
   const addItem = () => {
-    setReceiptData(prev => ({
+    setReceiptData((prev) => ({
       ...prev,
-      items: [...prev.items, { description: "", quantity: 1, price: 0 }]
-    }))
-  }
+      items: [...prev.items, { description: "", quantity: 1, price: 0 }],
+    }));
+  };
 
   const removeItem = (index: number) => {
-    if (receiptData.items.length <= 1) return
-    
-    setReceiptData(prev => {
-      const newItems = [...prev.items]
-      newItems.splice(index, 1)
-      return { ...prev, items: newItems }
-    })
-  }
+    if (receiptData.items.length <= 1) return;
+
+    setReceiptData((prev) => {
+      const newItems = [...prev.items];
+      newItems.splice(index, 1);
+      return { ...prev, items: newItems };
+    });
+  };
 
   const updateItem = (index: number, field: string, value: string | number) => {
-    setReceiptData(prev => {
-      const newItems = [...prev.items]
-      const numValue = typeof value === "string" ? 
-        (field === "quantity" ? parseInt(value) || 1 : parseFloat(value) || 0) : 
-        value
+    setReceiptData((prev) => {
+      const newItems = [...prev.items];
+      const numValue =
+        typeof value === "string"
+          ? field === "quantity"
+            ? parseInt(value) || 1
+            : parseFloat(value) || 0
+          : value;
 
-      newItems[index] = { ...newItems[index], [field]: numValue }
-      return { ...prev, items: newItems }
-    })
-  }
+      newItems[index] = { ...newItems[index], [field]: numValue };
+      return { ...prev, items: newItems };
+    });
+  };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-    setReceiptData(prev => ({ ...prev, [name]: value }))
-  }
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setReceiptData((prev) => ({ ...prev, [name]: value }));
+  };
 
   const handlePhoneChange = (value: string, countryCode: string) => {
-    setReceiptData(prev => ({
+    setReceiptData((prev) => ({
       ...prev,
       customerContact: value,
-      customerCountryCode: countryCode
-    }))
-  }
+      customerCountryCode: countryCode,
+    }));
+  };
 
   const handlePaymentPhoneChange = (value: string, countryCode: string) => {
-    setPaymentDetails(prev => ({
+    setPaymentDetails((prev) => ({
       ...prev,
       phoneNumber: value,
-      phoneCountryCode: countryCode
-    }))
-  }
+      phoneCountryCode: countryCode,
+    }));
+  };
 
   const handleCardNumberChange = (value: string) => {
-    const formatted = value.replace(/\D/g, "").replace(/(\d{4})(?=\d)/g, "$1 ").trim()
-    setPaymentDetails(prev => ({ ...prev, cardNumber: formatted }))
-  }
+    const formatted = value
+      .replace(/\D/g, "")
+      .replace(/(\d{4})(?=\d)/g, "$1 ")
+      .trim();
+    setPaymentDetails((prev) => ({ ...prev, cardNumber: formatted }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
+    e.preventDefault();
+
     // Additional auth check
     if (!user) {
-      router.push("/login")
-      return
+      router.push("/login");
+      return;
     }
 
-    setIsSubmitting(true)
-    setErrors({})
+    setIsSubmitting(true);
+    setErrors({});
 
     try {
       // Validate form data
       const validation = ReceiptSchema.safeParse({
         ...receiptData,
-        paymentDetails: Object.keys(paymentDetails).length > 0 ? paymentDetails : undefined
-      })
+        paymentDetails:
+          Object.keys(paymentDetails).length > 0 ? paymentDetails : undefined,
+      });
 
       if (!validation.success) {
-        const validationErrors: Record<string, string> = {}
-        validation.error.errors.forEach(err => {
-          const path = err.path.join('.')
-          validationErrors[path] = err.message
-        })
-        setErrors(validationErrors)
-        return
+        const validationErrors: Record<string, string> = {};
+        validation.error.errors.forEach((err) => {
+          const path = err.path.join(".");
+          validationErrors[path] = err.message;
+        });
+        setErrors(validationErrors);
+        return;
       }
 
       // Additional validation for payment details
-      if (receiptData.paymentType === "card" && (!paymentDetails.cardNumber || paymentDetails.cardNumber.replace(/\s/g, "").length !== 16)) {
-        setErrors(prev => ({ ...prev, 'paymentDetails.cardNumber': "Invalid card number (must be 16 digits)" }))
-        return
+      if (
+        receiptData.paymentType === "card" &&
+        (!paymentDetails.cardNumber ||
+          paymentDetails.cardNumber.replace(/\s/g, "").length !== 16)
+      ) {
+        setErrors((prev) => ({
+          ...prev,
+          "paymentDetails.cardNumber":
+            "Invalid card number (must be 16 digits)",
+        }));
+        return;
       }
 
-      if (receiptData.paymentType === "mobile" && (!paymentDetails.phoneNumber || paymentDetails.phoneNumber.length !== 10)) {
-        setErrors(prev => ({ ...prev, 'paymentDetails.phoneNumber': "Invalid phone number (must be 10 digits)" }))
-        return
+      if (
+        receiptData.paymentType === "mobile" &&
+        (!paymentDetails.phoneNumber ||
+          paymentDetails.phoneNumber.length !== 10)
+      ) {
+        setErrors((prev) => ({
+          ...prev,
+          "paymentDetails.phoneNumber":
+            "Invalid phone number (must be 10 digits)",
+        }));
+        return;
       }
 
       // Prepare the request body
@@ -248,31 +296,32 @@ export default function CreateReceipt() {
         total: receiptData.total,
         dueTotal: receiptData.dueTotal,
         items: receiptData.items,
-        paymentDetails: Object.keys(paymentDetails).length > 0 ? paymentDetails : undefined
-      }
+        paymentDetails:
+          Object.keys(paymentDetails).length > 0 ? paymentDetails : undefined,
+      };
 
-      const response = await fetch('/api/receipts', {
-        method: 'POST',
+      const response = await fetch("/api/receipts", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.token}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user.token}`,
         },
-        body: JSON.stringify(requestBody)
-      })
+        body: JSON.stringify(requestBody),
+      });
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to create receipt")
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to create receipt");
       }
 
-      const result = await response.json()
-      router.push(`/receipts/${result.receiptId}`)
+      const result = await response.json();
+      router.push(`/receipts/${result.receiptId}`);
     } catch (error: any) {
-      setErrors(prev => ({ ...prev, form: error.message }))
+      setErrors((prev) => ({ ...prev, form: error.message }));
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
   if (isLoading) {
     return (
@@ -281,14 +330,17 @@ export default function CreateReceipt() {
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="flex justify-start mb-6">
         <Link href="/">
-          <Button variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50">
+          <Button
+            variant="outline"
+            className="text-blue-600 border-blue-200 hover:bg-blue-50"
+          >
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Home
           </Button>
         </Link>
@@ -340,10 +392,12 @@ export default function CreateReceipt() {
                 <Label htmlFor="paymentType">Payment Type</Label>
                 <Select
                   value={receiptData.paymentType}
-                  onValueChange={(value) => setReceiptData(prev => ({
-                    ...prev,
-                    paymentType: value as "cash" | "card" | "mobile"
-                  }))}
+                  onValueChange={(value) =>
+                    setReceiptData((prev) => ({
+                      ...prev,
+                      paymentType: value as "cash" | "card" | "mobile",
+                    }))
+                  }
                   required
                 >
                   <SelectTrigger id="paymentType">
@@ -361,10 +415,12 @@ export default function CreateReceipt() {
                 <Label htmlFor="paymentStatus">Payment Status</Label>
                 <Select
                   value={receiptData.paymentStatus}
-                  onValueChange={(value) => setReceiptData(prev => ({
-                    ...prev,
-                    paymentStatus: value as "full" | "partial" | "due"
-                  }))}
+                  onValueChange={(value) =>
+                    setReceiptData((prev) => ({
+                      ...prev,
+                      paymentStatus: value as "full" | "partial" | "due",
+                    }))
+                  }
                   required
                 >
                   <SelectTrigger id="paymentStatus">
@@ -389,8 +445,10 @@ export default function CreateReceipt() {
                   placeholder="XXXX XXXX XXXX XXXX"
                   maxLength={19}
                 />
-                {errors['paymentDetails.cardNumber'] && (
-                  <p className="text-xs text-red-500">{errors['paymentDetails.cardNumber']}</p>
+                {errors["paymentDetails.cardNumber"] && (
+                  <p className="text-xs text-red-500">
+                    {errors["paymentDetails.cardNumber"]}
+                  </p>
                 )}
               </div>
             )}
@@ -404,8 +462,10 @@ export default function CreateReceipt() {
                   onChange={handlePaymentPhoneChange}
                   placeholder="Enter phone number"
                 />
-                {errors['paymentDetails.phoneNumber'] && (
-                  <p className="text-xs text-red-500">{errors['paymentDetails.phoneNumber']}</p>
+                {errors["paymentDetails.phoneNumber"] && (
+                  <p className="text-xs text-red-500">
+                    {errors["paymentDetails.phoneNumber"]}
+                  </p>
                 )}
               </div>
             )}
@@ -453,18 +513,27 @@ export default function CreateReceipt() {
               </div>
 
               {receiptData.items.map((item, index) => (
-                <div key={index} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                <div
+                  key={index}
+                  className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end"
+                >
                   <div className="md:col-span-5 space-y-2">
-                    <Label htmlFor={`item-${index}-description`}>Description</Label>
+                    <Label htmlFor={`item-${index}-description`}>
+                      Description
+                    </Label>
                     <Input
                       id={`item-${index}-description`}
                       value={item.description}
-                      onChange={(e) => updateItem(index, "description", e.target.value)}
+                      onChange={(e) =>
+                        updateItem(index, "description", e.target.value)
+                      }
                       placeholder="Item description"
                       required
                     />
                     {errors[`items.${index}.description`] && (
-                      <p className="text-xs text-red-500">{errors[`items.${index}.description`]}</p>
+                      <p className="text-xs text-red-500">
+                        {errors[`items.${index}.description`]}
+                      </p>
                     )}
                   </div>
 
@@ -475,11 +544,15 @@ export default function CreateReceipt() {
                       type="number"
                       min="1"
                       value={item.quantity}
-                      onChange={(e) => updateItem(index, "quantity", e.target.value)}
+                      onChange={(e) =>
+                        updateItem(index, "quantity", e.target.value)
+                      }
                       required
                     />
                     {errors[`items.${index}.quantity`] && (
-                      <p className="text-xs text-red-500">{errors[`items.${index}.quantity`]}</p>
+                      <p className="text-xs text-red-500">
+                        {errors[`items.${index}.quantity`]}
+                      </p>
                     )}
                   </div>
 
@@ -491,17 +564,23 @@ export default function CreateReceipt() {
                       min="0"
                       step="0.01"
                       value={item.price}
-                      onChange={(e) => updateItem(index, "price", e.target.value)}
+                      onChange={(e) =>
+                        updateItem(index, "price", e.target.value)
+                      }
                       required
                     />
                     {errors[`items.${index}.price`] && (
-                      <p className="text-xs text-red-500">{errors[`items.${index}.price`]}</p>
+                      <p className="text-xs text-red-500">
+                        {errors[`items.${index}.price`]}
+                      </p>
                     )}
                   </div>
 
                   {receiptData.paymentStatus === "partial" && (
                     <div className="md:col-span-2 space-y-2">
-                      <Label htmlFor={`item-${index}-advance`}>Advance Amount</Label>
+                      <Label htmlFor={`item-${index}-advance`}>
+                        Advance Amount
+                      </Label>
                       <Input
                         id={`item-${index}-advance`}
                         type="number"
@@ -509,10 +588,14 @@ export default function CreateReceipt() {
                         max={item.quantity * item.price}
                         step="0.01"
                         value={item.advanceAmount || ""}
-                        onChange={(e) => updateItem(index, "advanceAmount", e.target.value)}
+                        onChange={(e) =>
+                          updateItem(index, "advanceAmount", e.target.value)
+                        }
                       />
                       {errors[`items.${index}.advanceAmount`] && (
-                        <p className="text-xs text-red-500">{errors[`items.${index}.advanceAmount`]}</p>
+                        <p className="text-xs text-red-500">
+                          {errors[`items.${index}.advanceAmount`]}
+                        </p>
                       )}
                     </div>
                   )}
@@ -527,10 +610,14 @@ export default function CreateReceipt() {
                         max={item.quantity * item.price}
                         step="0.01"
                         value={item.dueAmount || ""}
-                        onChange={(e) => updateItem(index, "dueAmount", e.target.value)}
+                        onChange={(e) =>
+                          updateItem(index, "dueAmount", e.target.value)
+                        }
                       />
                       {errors[`items.${index}.dueAmount`] && (
-                        <p className="text-xs text-red-500">{errors[`items.${index}.dueAmount`]}</p>
+                        <p className="text-xs text-red-500">
+                          {errors[`items.${index}.dueAmount`]}
+                        </p>
                       )}
                     </div>
                   )}
@@ -554,13 +641,18 @@ export default function CreateReceipt() {
               <div className="flex justify-end gap-4 mt-4">
                 <div className="text-right">
                   <div className="text-sm text-gray-500">Total</div>
-                  <div className="text-xl font-bold">₹{receiptData.total.toFixed(2)}</div>
+                  <div className="text-xl font-bold">
+                    ₹{receiptData.total.toFixed(2)}
+                  </div>
                 </div>
 
-                {(receiptData.paymentStatus === "partial" || receiptData.paymentStatus === "due") && (
+                {(receiptData.paymentStatus === "partial" ||
+                  receiptData.paymentStatus === "due") && (
                   <div className="text-right">
                     <div className="text-sm text-gray-500">Due Amount</div>
-                    <div className="text-xl font-bold text-red-500">₹{receiptData.dueTotal.toFixed(2)}</div>
+                    <div className="text-xl font-bold text-red-500">
+                      ₹{receiptData.dueTotal.toFixed(2)}
+                    </div>
                   </div>
                 )}
               </div>
@@ -587,5 +679,5 @@ export default function CreateReceipt() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

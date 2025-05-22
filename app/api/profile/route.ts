@@ -32,12 +32,12 @@ export async function GET(request: Request) {
 
   if (!authHeader?.startsWith("Bearer ")) {
     return NextResponse.json(
-      { error: "Authorization header missing or invalid" },
+      { error: "Missing or invalid authorization header" },
       { status: 401 }
     );
   }
 
-  const token = authHeader.split(" ")[1];
+  const token = authHeader.slice(7);
   let connection: mysql.PoolConnection | undefined;
 
   try {

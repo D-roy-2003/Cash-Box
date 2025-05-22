@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/database";
 import bcrypt from "bcryptjs";
+import { signJwt } from "@/lib/auth";
 import { initializeDatabase } from "@/lib/database";
 
 interface SignupRequestBody {
@@ -76,6 +77,7 @@ export async function POST(request: Request) {
         id: insertId,
         name: name.trim(),
         email: email.trim(),
+        token: await signJwt(insertId),
         createdAt: new Date().toISOString(),
       },
       { status: 201 }

@@ -11,22 +11,22 @@ export async function signJwt(userId: string | number) {
 }
 
 export async function verifyJwt(token: string) {
-  return jwt.verify(token, JWT_SECRET) as { userId: number };
+  try {
+    return jwt.verify(token, JWT_SECRET) as { userId: number };
+  } catch (error) {
+    throw new Error("Invalid or expired token");
+  }
 }
 
 // ✅ Correct usage with `cookies().get()` — no await needed in this context
 export async function auth() {
-  const token = cookies().get("token")?.value; // ✅ no await needed here
+  const token = cookies().get("token")?.value;
   if (!token) return null;
 
   try {
     const decoded = await verifyJwt(token);
-    return {
-      user: {
-        id: decoded.userId,
-      },
-    };
-  } catch {
+    return { user: { id: decoded.userId } };
+  } catch (error) {
     return null;
   }
 }
