@@ -157,7 +157,7 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <header className="w-full py-4 px-6 flex justify-between items-center border-b bg-black text-white">
-        <h1 className="text-xl font-bold">Money Records</h1>
+        <h1 className="text-xl font-bold">Cash-Box</h1>
         <div className="flex items-center space-x-4">
           {user && (
             <div className="relative">
@@ -283,7 +283,7 @@ export default function Home() {
 
       <div className="flex flex-col items-center justify-center flex-1 px-4 py-12">
         <div className="max-w-3xl w-full text-center space-y-8">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">Money Records</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">Cash-Box</h1>
           <p className="text-xl text-gray-600">
             Create professional receipts and maintain accounts for your business in seconds
           </p>

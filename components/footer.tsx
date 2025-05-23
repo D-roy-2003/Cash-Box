@@ -49,14 +49,26 @@ export function Footer() {
               <span>•</span>
               <span>Prem Ghosh</span>
               <span>•</span>
-              <span>Prasenjit Datta</span>
+              <Link 
+                href="https://www.linkedin.com/in/prasenjit-datta/" 
+                target="_blank"
+                className="text-gray-300 hover:text-white hover:underline"
+              >
+                Prasenjit Datta
+              </Link>
               <span>•</span>
-              <span>Debangshu Roy</span>
+              <Link 
+                href="https://www.linkedin.com/in/debangshu-roy-5531b8272/" 
+                target="_blank"
+                className="text-gray-300 hover:text-white hover:underline"
+              >
+                Debangshu Roy
+              </Link>
             </div>
           </div>
 
           <div className="text-xs text-gray-400 mt-2">
-            &copy; {new Date().getFullYear()} Money Records. All Rights Reserved.
+            &copy; {new Date().getFullYear()} Cash-Box. All Rights Reserved.
           </div>
         </div>
       </div>
