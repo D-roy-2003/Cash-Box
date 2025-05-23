@@ -9,6 +9,7 @@ interface UserProfile {
   id: string | number;
   name: string;
   email: string;
+  createdAt: string;
   storeName: string;
   storeAddress: string;
   storeContact: string;
@@ -51,6 +52,7 @@ export async function GET(request: Request) {
     const [users] = await connection.query(
       `SELECT 
         id, name, email, 
+        created_at AS createdAt,
         store_name AS storeName, 
         store_address AS storeAddress, 
         store_contact AS storeContact, 
@@ -177,6 +179,7 @@ export async function PUT(request: Request) {
     const [updatedUser] = await connection.query(
       `SELECT 
         id, name, email,
+        created_at AS createdAt,
         store_name AS storeName, 
         store_address AS storeAddress, 
         store_contact AS storeContact, 

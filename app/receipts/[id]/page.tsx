@@ -116,6 +116,53 @@ export default function ReceiptPreview() {
     return isNaN(num) ? 0 : num;
   };
 
+  // Fixed formatDate function to handle both date and time
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "N/A";
+    
+    try {
+      const date = new Date(dateString);
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        return "Invalid Date";
+      }
+      return date.toLocaleDateString();
+    } catch (error) {
+      return "Invalid Date";
+    }
+  };
+
+  // New function to format date and time for createdAt
+  const formatDateTime = (dateString: string) => {
+    if (!dateString) return "N/A";
+    
+    try {
+      const date = new Date(dateString);
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        return "Invalid Date";
+      }
+      return date.toLocaleString(); // This will show both date and time
+    } catch (error) {
+      return "Invalid Date";
+    }
+  };
+
+  const calculateTotalItemValue = () => {
+    if (!receiptData) return 0;
+    return receiptData.items.reduce((total, item) => {
+      return total + item.quantity * item.price;
+    }, 0);
+  };
+
+  // Calculate total advance amount from all items
+  const calculateTotalAdvanceAmount = () => {
+    if (!receiptData) return 0;
+    return receiptData.items.reduce((total, item) => {
+      return total + ensureNumber(item.advanceAmount);
+    }, 0);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -134,17 +181,6 @@ export default function ReceiptPreview() {
       </div>
     );
   }
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString();
-  };
-
-  const calculateTotalItemValue = () => {
-    return receiptData.items.reduce((total, item) => {
-      return total + item.quantity * item.price;
-    }, 0);
-  };
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-4xl">
@@ -326,7 +362,7 @@ export default function ReceiptPreview() {
                   Total Value: ₹{calculateTotalItemValue().toFixed(2)}
                 </div>
                 <div className="text-base mt-1">
-                  Advance Paid: ₹{ensureNumber(receiptData.total).toFixed(2)}
+                  Advance Paid: ₹{calculateTotalAdvanceAmount().toFixed(2)}
                 </div>
                 <div className="text-base font-bold text-red-500 mt-1 print:text-black">
                   Balance Due: ₹{ensureNumber(receiptData.dueTotal).toFixed(2)}
@@ -378,7 +414,7 @@ export default function ReceiptPreview() {
           )}
 
         <div className="mt-12 text-center text-gray-500 text-sm">
-          <p>Created at: {formatDate(receiptData.createdAt)}</p>
+          <p>Created at: {formatDateTime(receiptData.createdAt)}</p>
           <p>Thank you for your business!</p>
         </div>
       </Card>

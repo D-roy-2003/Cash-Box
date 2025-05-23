@@ -8,6 +8,8 @@ interface ReceiptPreview {
   receiptId: string | number;
   receiptNumber: string;
   date: string;
+  createdAt: string;
+  updatedAt?: string;
   customerName: string;
   customerContact: string;
   customerCountryCode: string;
@@ -43,6 +45,25 @@ interface StoreInfo {
   countryCode: string;
 }
 
+// Helper function to format date for MySQL insertion
+function formatDateForMySQL(date: Date | string): string {
+  const d = new Date(date);
+  if (isNaN(d.getTime())) {
+    throw new Error("Invalid date format");
+  }
+  // Format as MySQL DATETIME: YYYY-MM-DD HH:MM:SS (remove milliseconds and 'T')
+  return d.toISOString().slice(0, 19).replace('T', ' ');
+}
+
+// Helper function to format date for API response
+function formatDateForResponse(date: Date | string): string {
+  const d = new Date(date);
+  if (isNaN(d.getTime())) {
+    throw new Error("Invalid date format");
+  }
+  return d.toISOString();
+}
+
 // Helper function to convert database row to PaymentDetails
 function toPaymentDetails(
   row: mysql.RowDataPacket | undefined
@@ -72,10 +93,13 @@ export async function GET(
   try {
     connection = await pool.getConnection();
 
-    // Get receipt with store info
+    // Get receipt with store info - including proper datetime fields
     const [receipts] = await connection.query<mysql.RowDataPacket[]>(
       `SELECT 
-        r.id, r.receipt_number, r.date, 
+        r.id, r.receipt_number, 
+        DATE_FORMAT(r.date, '%Y-%m-%d') as date,
+        r.created_at,
+        r.updated_at,
         r.customer_name, r.customer_contact, r.customer_country_code,
         r.payment_type, r.payment_status, r.notes,
         r.total, r.due_total, r.user_id,
@@ -117,11 +141,13 @@ export async function GET(
       [params.id]
     );
 
-    // Compose final result
+    // Compose final result with proper date formatting
     const response: ReceiptPreview = {
       receiptId: receipt.id,
       receiptNumber: receipt.receipt_number,
-      date: receipt.date,
+      date: receipt.date, // This is now formatted as YYYY-MM-DD
+      createdAt: formatDateForResponse(receipt.created_at),
+      updatedAt: receipt.updated_at ? formatDateForResponse(receipt.updated_at) : undefined,
       customerName: receipt.customer_name,
       customerContact: receipt.customer_contact,
       customerCountryCode: receipt.customer_country_code,
@@ -151,7 +177,57 @@ export async function GET(
   } catch (error: unknown) {
     const errorMessage =
       error instanceof Error ? error.message : "Failed to fetch receipt data";
-    console.error("Error in GET /api/preview/[id]:", error);
+    console.error("Error in GET /api/receipts/[id]:", error);
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
+  } finally {
+    if (connection) {
+      await connection.release();
+    }
+  }
+}
+
+// If you have a POST or PUT method that's causing the datetime error, here's how to fix it:
+export async function POST(request: Request) {
+  let connection: mysql.PoolConnection | undefined;
+
+  try {
+    const body = await request.json();
+    connection = await pool.getConnection();
+
+    // When inserting, use the MySQL-formatted date
+    const now = formatDateForMySQL(new Date());
+    
+    // Also format the date field if it's coming from the request
+    const formattedDate = body.date ? formatDateForMySQL(body.date) : formatDateForMySQL(new Date());
+    
+    const [result] = await connection.query<mysql.ResultSetHeader>(
+      `INSERT INTO receipts (
+        receipt_number, date, customer_name, customer_contact, 
+        customer_country_code, payment_type, payment_status, 
+        notes, total, due_total, user_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        body.receiptNumber,
+        formattedDate, // Use formatted date instead of body.date
+        body.customerName,
+        body.customerContact,
+        body.customerCountryCode,
+        body.paymentType,
+        body.paymentStatus,
+        body.notes,
+        body.total,
+        body.dueTotal,
+        body.userId,
+        now, // created_at - properly formatted
+        now  // updated_at - properly formatted
+      ]
+    );
+
+    return NextResponse.json({ success: true, id: result.insertId });
+  } catch (error: unknown) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to create receipt";
+    console.error("Error in POST /api/receipts:", error);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   } finally {
     if (connection) {

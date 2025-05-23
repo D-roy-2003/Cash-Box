@@ -39,6 +39,16 @@ interface JwtPayload {
   [key: string]: any;
 }
 
+// Helper function to format date for MySQL insertion
+function formatDateForMySQL(date: Date | string): string {
+  const d = new Date(date);
+  if (isNaN(d.getTime())) {
+    throw new Error("Invalid date format");
+  }
+  // Format as MySQL DATETIME: YYYY-MM-DD HH:MM:SS (remove milliseconds and 'T')
+  return d.toISOString().slice(0, 19).replace('T', ' ');
+}
+
 export async function POST(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
@@ -167,7 +177,7 @@ function validateReceiptBody(body: ReceiptBody): string | null {
   return null;
 }
 
-// Database Operations with Case Normalization
+// Database Operations with Case Normalization and Proper Timestamp
 async function createReceipt(
   connection: mysql.PoolConnection,
   body: ReceiptBody,
@@ -175,15 +185,19 @@ async function createReceipt(
 ): Promise<number> {
   const normalizedStatus = body.paymentStatus.toLowerCase();
   const normalizedType = body.paymentType.toLowerCase();
+  
+  // Create current timestamp for receipt creation - FIXED FORMAT
+  const createdAt = formatDateForMySQL(new Date());
+  const formattedDate = formatDateForMySQL(body.date);
 
   const [result] = await connection.query<mysql.ResultSetHeader>(
     `INSERT INTO receipts (
       receipt_number, date, customer_name, customer_contact, customer_country_code,
-      payment_type, payment_status, notes, total, due_total, user_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      payment_type, payment_status, notes, total, due_total, user_id, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       body.receiptNumber,
-      body.date,
+      formattedDate, // Use formatted date
       body.customerName,
       body.customerContact,
       body.customerCountryCode,
@@ -193,27 +207,14 @@ async function createReceipt(
       body.total,
       body.dueTotal,
       userId,
-    ]
-  );
-
-  // Create account transaction
-  await connection.query(
-    `INSERT INTO account_transactions (
-      particulars, amount, type, user_id, receipt_id
-    ) VALUES (?, ?, ?, ?, ?)`,
-    [
-      `Receipt ${body.receiptNumber}`,
-      body.total,
-      "credit",
-      userId,
-      result.insertId,
+      createdAt, // Use formatted datetime
     ]
   );
 
   return result.insertId;
 }
 
-// Rest of the functions remain the same as in your original code
+// Rest of the functions with fixed datetime handling
 async function processReceiptItems(
   connection: mysql.PoolConnection,
   receiptId: number,
@@ -278,7 +279,7 @@ async function processDueRecords(
       productOrdered,
       totalQuantity,
       body.dueTotal,
-      expectedPaymentDate.toISOString().split("T")[0],
+      expectedPaymentDate.toISOString().split("T")[0], // This is OK for DATE fields
       userId,
       body.receiptNumber,
     ]
@@ -291,16 +292,20 @@ async function processAccountTransaction(
   body: ReceiptBody,
   userId: string
 ): Promise<void> {
+  // FIXED: Use MySQL datetime format instead of ISO string
+  const createdAt = formatDateForMySQL(new Date());
+  
   await connection.query(
     `INSERT INTO account_transactions (
-      particulars, amount, type, user_id, receipt_id
-    ) VALUES (?, ?, ?, ?, ?)`,
+      particulars, amount, type, user_id, receipt_id, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?)`,
     [
       `Payment from ${body.customerName}`,
       body.total,
       "credit",
       userId,
       receiptId,
+      createdAt, // Use formatted datetime
     ]
   );
 }

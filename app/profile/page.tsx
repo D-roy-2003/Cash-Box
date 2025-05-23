@@ -91,6 +91,23 @@ export default function ProfilePage() {
     [checkProfileCompletion]
   );
 
+  // Helper function to format date safely
+  const formatDate = (dateString: string): string => {
+    try {
+      if (!dateString) return "N/A";
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return "N/A";
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch (error) {
+      console.error("Date formatting error:", error);
+      return "N/A";
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -266,7 +283,7 @@ export default function ProfilePage() {
 
       const currentUser = JSON.parse(userJSON);
 
-      let photoUrl = profilePhoto || null;
+      let photoPath = profilePhoto || null;
       if (selectedFile) {
         const uploadFormData = new FormData();
         uploadFormData.append("file", selectedFile);
@@ -284,9 +301,9 @@ export default function ProfilePage() {
         }
 
         const uploadData = await uploadResponse.json();
-        photoUrl = uploadData.url;
+        photoPath = uploadData.filePath;
       } else if (profilePhoto === null) {
-        photoUrl = null;
+        photoPath = null;
       }
 
       const isComplete = checkProfileCompletion({
@@ -302,7 +319,7 @@ export default function ProfilePage() {
         storeAddress,
         storeContact,
         storeCountryCode,
-        profilePhoto: photoUrl,
+        profilePhoto: photoPath,
         isProfileComplete: isComplete,
       };
 
@@ -538,7 +555,7 @@ export default function ProfilePage() {
             <button className="flex items-center space-x-2 focus:outline-none">
               {profilePhoto ? (
                 <img
-                  src={profilePhoto}
+                  src={profilePhoto.startsWith('/Uploads') ? profilePhoto : profilePhoto}
                   alt="Profile"
                   className="h-10 w-10 rounded-full object-cover border-2 border-gray-200 cursor-pointer hover:border-blue-500 transition-colors"
                   onClick={openFullScreenPhoto}
@@ -586,7 +603,7 @@ export default function ProfilePage() {
                 {profilePhoto ? (
                   <div className="relative">
                     <img
-                      src={profilePhoto}
+                      src={profilePhoto.startsWith('/Uploads') ? profilePhoto : profilePhoto}
                       alt="Profile"
                       className="h-20 w-20 rounded-full object-cover border-2 border-gray-200 cursor-pointer"
                       onClick={(e) => {
@@ -626,7 +643,7 @@ export default function ProfilePage() {
               <div>
                 <CardTitle className="text-2xl">{user.name}</CardTitle>
                 <p className="text-sm text-gray-500">
-                  Member since {new Date(user.createdAt).toLocaleDateString()}
+                  Member since {formatDate(user.createdAt)}
                 </p>
               </div>
             </div>
@@ -663,61 +680,56 @@ export default function ProfilePage() {
 
                 <form onSubmit={handleUpdateProfile} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">
-                      Full Name <span className="text-red-500">*</span>
-                    </Label>
+                    <Label htmlFor="name">Full Name *</Label>
                     <Input
                       id="name"
+                      type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
+                      placeholder="Enter your full name"
                       required
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="storeName">
-                      Store/Enterprise Name{" "}
-                      <span className="text-red-500">*</span>
-                    </Label>
+                    <Label htmlFor="storeName">Store Name *</Label>
                     <Input
                       id="storeName"
+                      type="text"
                       value={storeName}
                       onChange={(e) => setStoreName(e.target.value)}
+                      placeholder="Enter your store name"
                       required
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="storeAddress">
-                      Store Address <span className="text-red-500">*</span>
-                    </Label>
+                    <Label htmlFor="storeAddress">Store Address *</Label>
                     <Input
                       id="storeAddress"
+                      type="text"
                       value={storeAddress}
                       onChange={(e) => setStoreAddress(e.target.value)}
+                      placeholder="Enter your store address"
                       required
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="storeContact">
-                      Store Contact Number{" "}
-                      <span className="text-red-500">*</span>
-                    </Label>
-                    <div className="flex-1">
-                      <PhoneInput
-                        value={storeContact}
-                        countryCode={storeCountryCode}
-                        onChange={handlePhoneChange}
-                        placeholder="10-digit number"
-                      />
-                    </div>
+                    <Label htmlFor="storeContact">Store Contact Number *</Label>
+                    <PhoneInput
+                      value={storeContact}
+                      countryCode={storeCountryCode}
+                      onChange={handlePhoneChange}
+                      placeholder="Enter 10 digit phone number"
+                      className="w-full"
+                    />
                     {contactError && (
-                      <p className="text-sm text-red-500">{contactError}</p>
+                      <p className="text-sm text-red-600">{contactError}</p>
                     )}
                   </div>
 
-                  <Button type="submit" disabled={loading}>
+                  <Button type="submit" disabled={loading} className="w-full">
                     {loading ? "Updating..." : "Update Profile"}
                   </Button>
                 </form>
@@ -729,7 +741,9 @@ export default function ProfilePage() {
             <Card>
               <CardHeader>
                 <CardTitle>Change Password</CardTitle>
-                <CardDescription>Update your password</CardDescription>
+                <CardDescription>
+                  Update your password to keep your account secure
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {error && (
@@ -746,44 +760,46 @@ export default function ProfilePage() {
 
                 <form onSubmit={handleUpdatePassword} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="currentPassword">Current Password</Label>
+                    <Label htmlFor="currentPassword">Current Password *</Label>
                     <Input
                       id="currentPassword"
                       type="password"
                       value={currentPassword}
                       onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Enter your current password"
                       required
                     />
                   </div>
+
                   <div className="space-y-2">
-                    <Label htmlFor="newPassword">New Password</Label>
+                    <Label htmlFor="newPassword">New Password *</Label>
                     <Input
                       id="newPassword"
                       type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter your new password"
                       required
                     />
-                    <p className="text-xs text-gray-500">
-                      Password must be at least 8 characters long and contain at
-                      least one uppercase letter, one lowercase letter, one
-                      digit, and one special character.
+                    <p className="text-sm text-gray-600">
+                      Password must be at least 8 characters long and contain uppercase, lowercase, number, and special character.
                     </p>
                   </div>
+
                   <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">
-                      Confirm New Password
-                    </Label>
+                    <Label htmlFor="confirmPassword">Confirm New Password *</Label>
                     <Input
                       id="confirmPassword"
                       type="password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm your new password"
                       required
                     />
                   </div>
-                  <Button type="submit" disabled={loading}>
-                    {loading ? "Updating..." : "Change Password"}
+
+                  <Button type="submit" disabled={loading} className="w-full">
+                    {loading ? "Updating..." : "Update Password"}
                   </Button>
                 </form>
               </CardContent>
@@ -791,11 +807,13 @@ export default function ProfilePage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Image Viewer Modal */}
       {profilePhoto && (
         <ImageViewer
-          src={profilePhoto}
-          alt="Profile Photo"
           isOpen={isImageViewerOpen}
+          src={profilePhoto.startsWith('/Uploads') ? profilePhoto : profilePhoto}
+          alt="Profile Photo"
           onClose={() => setIsImageViewerOpen(false)}
         />
       )}

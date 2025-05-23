@@ -19,7 +19,7 @@ interface UserProfile {
   id: string
   name: string
   email: string
-  profilePhoto?: string
+  profilePhoto?: string | null
 }
 
 export default function Home() {
@@ -32,31 +32,59 @@ export default function Home() {
   const notificationRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    // Check if user is logged in
-    const userJSON = localStorage.getItem("currentUser")
-    if (userJSON) {
-      setUser(JSON.parse(userJSON))
+    const fetchUserProfile = async () => {
+      const userJSON = localStorage.getItem("currentUser")
+      if (!userJSON) return
+
+      const currentUser = JSON.parse(userJSON)
+      if (!currentUser?.token) return
+
+      try {
+        // Fetch latest profile data from API
+        const response = await fetch("/api/profile", {
+          headers: {
+            Authorization: `Bearer ${currentUser.token}`,
+            "Content-Type": "application/json",
+          },
+        })
+
+        if (response.ok) {
+          const userData = await response.json()
+          // Update user state with latest data including profile photo
+          setUser({
+            id: userData.id || currentUser.id,
+            name: userData.name || currentUser.name,
+            email: userData.email || currentUser.email,
+            profilePhoto: userData.profilePhoto
+          })
+        } else {
+          // Fallback to localStorage data if API fails
+          setUser(currentUser)
+        }
+      } catch (error) {
+        console.error("Error fetching profile:", error)
+        // Fallback to localStorage data
+        setUser(currentUser)
+      }
     }
+
+    fetchUserProfile()
   }, [])
 
   useEffect(() => {
     if (user) {
-      // Check for overdue payments
       const overduePayments = checkOverduePayments()
       setNotifications(overduePayments)
 
-      // Check if there are new notifications since last read
       const lastReadTime = localStorage.getItem("notificationsLastRead")
       if (lastReadTime) {
         const lastRead = new Date(lastReadTime)
-        // Check if any notifications were created after last read
         const hasNew = overduePayments.some((notification: any) => {
           const createdAt = new Date(notification.createdAt)
           return createdAt > lastRead
         })
         setHasUnreadNotifications(hasNew || overduePayments.length > 0)
       } else if (overduePayments.length > 0) {
-        // If never read before and there are notifications
         setHasUnreadNotifications(true)
       }
     }
@@ -69,7 +97,6 @@ export default function Home() {
       }
     }
 
-    // Only add the event listener if the dropdown is open
     if (isNotificationsOpen) {
       document.addEventListener("mousedown", handleClickOutside)
     }
@@ -78,6 +105,28 @@ export default function Home() {
       document.removeEventListener("mousedown", handleClickOutside)
     }
   }, [isNotificationsOpen])
+
+  const getProfilePhotoUrl = (profilePhoto?: string | null): string => {
+    if (!profilePhoto) return "/placeholder.svg"
+    
+    // If it's already a complete URL (http/https), return as is
+    if (profilePhoto.startsWith('http')) {
+      return profilePhoto
+    }
+    
+    // If it's a data URL (base64), return as is
+    if (profilePhoto.startsWith('data:')) {
+      return profilePhoto
+    }
+    
+    // If it already starts with /Uploads/, return as is
+    if (profilePhoto.startsWith('/Uploads/')) {
+      return profilePhoto
+    }
+    
+    // Otherwise, prepend /Uploads/
+    return `/Uploads/${profilePhoto.replace(/^\/+/, '')}`
+  }
 
   const handleLogout = () => {
     localStorage.removeItem("currentUser")
@@ -91,7 +140,6 @@ export default function Home() {
     const dueRecords = JSON.parse(dueRecordsJSON)
     const today = new Date()
 
-    // Filter for overdue and unpaid records
     return dueRecords.filter((record: any) => {
       const dueDate = new Date(record.expectedPaymentDate)
       return !record.isPaid && dueDate < today
@@ -102,7 +150,6 @@ export default function Home() {
     setIsNotificationsOpen(!isNotificationsOpen)
     if (hasUnreadNotifications) {
       setHasUnreadNotifications(false)
-      // Mark notifications as read in localStorage
       localStorage.setItem("notificationsLastRead", new Date().toISOString())
     }
   }
@@ -182,9 +229,9 @@ export default function Home() {
                   >
                     {user.profilePhoto ? (
                       <img
-                        src={user.profilePhoto || "/placeholder.svg"}
+                        src={getProfilePhotoUrl(user.profilePhoto)}
                         alt={user.name}
-                        className="h-10 w-10 rounded-full object-contain cursor-pointer"
+                        className="h-10 w-10 rounded-full object-cover cursor-pointer"
                         onClick={(e) => {
                           e.preventDefault()
                           e.stopPropagation()
@@ -192,8 +239,10 @@ export default function Home() {
                         }}
                       />
                     ) : (
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full">
-                        <span className="text-sm font-medium text-gray-600">{user.name.charAt(0).toUpperCase()}</span>
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-200">
+                        <span className="text-sm font-medium text-gray-600">
+                          {user.name.charAt(0).toUpperCase()}
+                        </span>
                       </div>
                     )}
                   </Button>
@@ -254,7 +303,7 @@ export default function Home() {
       </div>
       {user?.profilePhoto && (
         <ImageViewer
-          src={user.profilePhoto || "/placeholder.svg"}
+          src={getProfilePhotoUrl(user.profilePhoto)}
           alt={user.name}
           isOpen={isImageViewerOpen}
           onClose={() => setIsImageViewerOpen(false)}
