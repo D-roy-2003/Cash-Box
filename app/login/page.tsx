@@ -52,7 +52,6 @@ export default function LoginPage() {
         throw new Error(data.error || "Login failed");
       }
 
-      // Verify token exists before storing
       if (!data.token) {
         throw new Error("No token received");
       }
@@ -67,7 +66,6 @@ export default function LoginPage() {
         })
       );
 
-      // Redirect to dashboard
       router.push("/");
     } catch (err: any) {
       setError(err.message || "An unexpected error occurred");
@@ -123,15 +121,7 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
-                  <Link
-                    href="/forgot-password"
-                    className="text-sm text-blue-600 hover:text-blue-500"
-                  >
-                    Forgot password?
-                  </Link>
-                </div>
+                <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
                   type="password"

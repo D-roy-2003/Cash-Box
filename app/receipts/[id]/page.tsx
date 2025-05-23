@@ -28,7 +28,6 @@ interface ReceiptData {
   dueTotal?: number;
   createdAt: string;
   paymentDetails?: {
-    cardNumber?: string;
     phoneNumber?: string;
   };
   storeInfo?: {
@@ -71,7 +70,6 @@ export default function ReceiptPreview() {
   };
 
   const handleDownload = () => {
-    // Create a printable version
     const receiptHtml = document.getElementById("receipt-content")?.innerHTML;
     if (!receiptHtml) return;
 
@@ -79,53 +77,39 @@ export default function ReceiptPreview() {
     if (!printWindow) return;
 
     printWindow.document.write(`
-  <html>
-    <head>
-      <title>Receipt ${receiptData?.receiptNumber}</title>
-      <style>
-        @page { size: A4; margin: 1cm; }
-        body { font-family: Arial, sans-serif; padding: 20px; margin: 0; }
-        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { font-weight: bold; }
-        .receipt-header { text-align: center; margin-bottom: 20px; }
-        .receipt-info { margin-bottom: 20px; }
-        .receipt-total { font-weight: bold; text-align: right; margin-top: 20px; }
-        .receipt-notes { margin-top: 30px; font-style: italic; }
-        @media print {
-          body { width: 100%; }
-          table { page-break-inside: avoid; }
-        }
-      </style>
-    </head>
-    <body>
-      ${receiptHtml}
-    </body>
-  </html>
-`);
+      <html>
+        <head>
+          <title>Receipt ${receiptData?.receiptNumber}</title>
+          <style>
+            @page { size: A4; margin: 1cm; }
+            body { font-family: Arial, sans-serif; padding: 20px; margin: 0; }
+            table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+            th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+            th { font-weight: bold; }
+            .receipt-header { text-align: center; margin-bottom: 20px; }
+            .receipt-info { margin-bottom: 20px; }
+            .receipt-total { font-weight: bold; text-align: right; margin-top: 20px; }
+            .receipt-notes { margin-top: 30px; font-style: italic; }
+            @media print {
+              body { width: 100%; }
+              table { page-break-inside: avoid; }
+            }
+          </style>
+        </head>
+        <body>
+          ${receiptHtml}
+        </body>
+      </html>
+    `);
 
     printWindow.document.close();
     printWindow.focus();
 
-    // Print and download as PDF
     setTimeout(() => {
       printWindow.print();
     }, 250);
   };
 
-  const formatCardNumberWithSpaces = (cardNumber: string) => {
-    // Add spaces every 4 characters
-    let formatted = "";
-    for (let i = 0; i < cardNumber.length; i++) {
-      if (i > 0 && i % 4 === 0) {
-        formatted += " ";
-      }
-      formatted += cardNumber[i];
-    }
-    return formatted;
-  };
-
-  // Helper function to ensure values are numbers
   const ensureNumber = (value: any): number => {
     if (value === undefined || value === null) return 0;
     const num = Number(value);
@@ -156,7 +140,6 @@ export default function ReceiptPreview() {
     return date.toLocaleDateString();
   };
 
-  // Calculate total item value (price * quantity) for all items
   const calculateTotalItemValue = () => {
     return receiptData.items.reduce((total, item) => {
       return total + item.quantity * item.price;
@@ -221,8 +204,10 @@ export default function ReceiptPreview() {
                 receiptData.paymentStatus === "advance") && (
                 <p>
                   <span className="font-medium">Payment Method: </span>
-                  {receiptData.paymentType.charAt(0).toUpperCase() +
-                    receiptData.paymentType.slice(1)}
+                  {receiptData.paymentType === "mobile"
+                    ? "Online"
+                    : receiptData.paymentType.charAt(0).toUpperCase() +
+                      receiptData.paymentType.slice(1)}
                 </p>
               )}
               <p>
@@ -230,19 +215,9 @@ export default function ReceiptPreview() {
                 {receiptData.paymentStatus === "full"
                   ? "Full Payment"
                   : receiptData.paymentStatus === "advance"
-                  ? "Advance Payment (Partial)"
+                  ? "Advance Payment"
                   : "Due Payment"}
               </p>
-              {receiptData.paymentDetails?.cardNumber &&
-                receiptData.paymentStatus !== "due" && (
-                  <p>
-                    <span className="font-medium">Card Number: </span>
-                    XXXXXXXXXXXX{" "}
-                    {formatCardNumberWithSpaces(
-                      receiptData.paymentDetails.cardNumber.slice(-4)
-                    )}
-                  </p>
-                )}
               {receiptData.paymentDetails?.phoneNumber &&
                 receiptData.paymentStatus !== "due" && (
                   <p>

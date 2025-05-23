@@ -393,27 +393,27 @@ export default function ProfilePage() {
       }
 
       const currentUser = JSON.parse(userJSON);
-
-      const usersJSON = localStorage.getItem("users");
-      const users = usersJSON ? JSON.parse(usersJSON) : [];
-      const userToUpdate = users.find((u: any) => u.id === user.id);
-
-      if (!userToUpdate) {
-        setError("User not found");
-        setLoading(false);
+      if (!currentUser?.token) {
+        router.push("/login");
         return;
       }
 
-      if (userToUpdate.password !== currentPassword) {
-        setError("Current password is incorrect");
-        setLoading(false);
-        return;
-      }
+      const response = await fetch("/api/profile/password", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentUser.token}`,
+        },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+        }),
+      });
 
-      const updatedUsers = users.map((u: any) =>
-        u.id === user.id ? { ...u, password: newPassword } : u
-      );
-      localStorage.setItem("users", JSON.stringify(updatedUsers));
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to update password");
+      }
 
       setSuccess("Password updated successfully");
       setCurrentPassword("");

@@ -25,8 +25,8 @@ interface ReceiptBody {
   customerName: string;
   customerContact: string;
   customerCountryCode: string;
-  paymentType: string;
-  paymentStatus: string;
+  paymentType: 'cash' | 'online';
+  paymentStatus: 'full' | 'advance' | 'due';
   notes?: string;
   total: number;
   dueTotal: number;
@@ -54,10 +54,12 @@ export async function POST(request: Request) {
     if (!decoded?.userId) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
-    const userId = String(decoded.userId); // Ensure string type
+    const userId = String(decoded.userId);
 
     // Parse and validate request body
     const body: ReceiptBody = await request.json();
+    console.log('Received paymentStatus:', body.paymentStatus); // Debug log
+    
     const validationError = validateReceiptBody(body);
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
@@ -66,9 +68,6 @@ export async function POST(request: Request) {
     // Database operations
     connection = await pool.getConnection();
     await connection.beginTransaction();
-
-    // Setup database triggers
-    // await setupReceiptTriggers(connection);
 
     // Create receipt and related records
     const receiptId = await createReceipt(connection, body, userId);
@@ -102,8 +101,15 @@ export async function POST(request: Request) {
       }
     }
 
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error occurred";
+    let errorMessage = "Unknown error occurred";
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      // Handle specific MySQL errors
+      if (error.message.includes('Data truncated for column')) {
+        errorMessage = "Invalid payment status value provided";
+      }
+    }
+    
     console.error("Receipt creation error:", error);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   } finally {
@@ -113,14 +119,26 @@ export async function POST(request: Request) {
   }
 }
 
-// Validation Helper
+// Enhanced Validation Helper
 function validateReceiptBody(body: ReceiptBody): string | null {
   if (!body.receiptNumber) return "Receipt number is required";
   if (!body.date) return "Date is required";
   if (!body.customerName) return "Customer name is required";
   if (!body.customerContact) return "Customer contact is required";
-  if (!body.paymentType) return "Payment type is required";
-  if (!body.paymentStatus) return "Payment status is required";
+  
+  // Validate payment type
+  const validTypes = ['cash', 'online'];
+  if (!body.paymentType || !validTypes.includes(body.paymentType.toLowerCase())) {
+    return `Payment type must be one of: ${validTypes.join(', ')}`;
+  }
+
+  // Validate payment status
+  const validStatuses = ['full', 'advance', 'due'];
+  if (!body.paymentStatus || !validStatuses.includes(body.paymentStatus.toLowerCase())) {
+    return `Payment status must be one of: ${validStatuses.join(', ')}`;
+  }
+
+  // Validate items
   if (!Array.isArray(body.items) || body.items.length === 0) {
     return "At least one item is required";
   }
@@ -135,27 +153,29 @@ function validateReceiptBody(body: ReceiptBody): string | null {
     }
   }
 
+  // Validate totals based on payment status
+  if (body.paymentStatus === 'full' && body.dueTotal !== 0) {
+    return "Due total must be 0 for full payment";
+  }
+  if (body.paymentStatus === 'advance' && body.dueTotal <= 0) {
+    return "Due total must be positive for advance payment";
+  }
+  if (body.paymentStatus === 'due' && body.total <= 0) {
+    return "Total must be positive for due payment";
+  }
+
   return null;
 }
 
-// Database Operations
-async function setupReceiptTriggers(
-  connection: mysql.PoolConnection
-): Promise<void> {
-  try {
-    // Remove all trigger creation attempts
-    await connection.query(`DROP TRIGGER IF EXISTS after_receipt_insert`);
-  } catch (error) {
-    console.error("Trigger setup failed:", error);
-    throw new Error("Failed to setup database triggers");
-  }
-}
-
+// Database Operations with Case Normalization
 async function createReceipt(
   connection: mysql.PoolConnection,
   body: ReceiptBody,
   userId: string
 ): Promise<number> {
+  const normalizedStatus = body.paymentStatus.toLowerCase();
+  const normalizedType = body.paymentType.toLowerCase();
+
   const [result] = await connection.query<mysql.ResultSetHeader>(
     `INSERT INTO receipts (
       receipt_number, date, customer_name, customer_contact, customer_country_code,
@@ -167,8 +187,8 @@ async function createReceipt(
       body.customerName,
       body.customerContact,
       body.customerCountryCode,
-      body.paymentType,
-      body.paymentStatus,
+      normalizedType,
+      normalizedStatus,
       body.notes || null,
       body.total,
       body.dueTotal,
@@ -176,7 +196,7 @@ async function createReceipt(
     ]
   );
 
-  // Create account transaction directly
+  // Create account transaction
   await connection.query(
     `INSERT INTO account_transactions (
       particulars, amount, type, user_id, receipt_id
@@ -193,6 +213,7 @@ async function createReceipt(
   return result.insertId;
 }
 
+// Rest of the functions remain the same as in your original code
 async function processReceiptItems(
   connection: mysql.PoolConnection,
   receiptId: number,

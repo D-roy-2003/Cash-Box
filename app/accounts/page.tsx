@@ -85,55 +85,6 @@ export default function AccountsPage() {
     setBalance(newBalance);
   };
 
-  const handleCredit = async () => {
-    if (
-      !particulars ||
-      !amount ||
-      isNaN(Number.parseFloat(amount)) ||
-      Number.parseFloat(amount) <= 0
-    ) {
-      alert("Please enter valid particulars and amount");
-      return;
-    }
-
-    const amountValue = Number.parseFloat(amount);
-
-    try {
-      const response = await fetch("/api/transactions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${user.token}`,
-        },
-        body: JSON.stringify({
-          particulars,
-          amount: amountValue,
-          type: "credit",
-        }),
-      });
-
-      if (!response.ok) throw new Error("Failed to save credit transaction");
-
-      const newTransaction: Transaction = {
-        id: Date.now().toString(),
-        particulars,
-        amount: amountValue,
-        type: "credit",
-        date: new Date().toISOString(),
-      };
-
-      const newTransactions = [...transactions, newTransaction];
-      const newBalance = balance + amountValue;
-      saveData(newTransactions, newBalance);
-
-      setParticulars("");
-      setAmount("");
-    } catch (err) {
-      console.error(err);
-      alert("Error saving transaction");
-    }
-  };
-
   const handleDebit = () => {
     if (
       !particulars ||
@@ -302,12 +253,6 @@ export default function AccountsPage() {
               placeholder="Amount"
               className="flex-1 border px-4 py-2 rounded-md"
             />
-            <Button
-              onClick={handleCredit}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              Add Credit
-            </Button>
             <Button
               onClick={handleDebit}
               className="bg-red-600 hover:bg-red-700"
