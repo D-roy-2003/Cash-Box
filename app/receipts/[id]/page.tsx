@@ -1,83 +1,82 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { ArrowLeft, Download, Printer } from "lucide-react"
-import Link from "next/link"
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { ArrowLeft, Download, Printer } from "lucide-react";
+import Link from "next/link";
 
 interface ReceiptItem {
-  description: string
-  quantity: number
-  price: number
-  advanceAmount?: number
-  dueAmount?: number
+  description: string;
+  quantity: number;
+  price: number;
+  advanceAmount?: number;
+  dueAmount?: number;
 }
 
 interface ReceiptData {
-  receiptNumber: string
-  date: string
-  customerName: string
-  customerContact: string
-  paymentType: string
-  paymentStatus: string
-  notes: string
-  items: ReceiptItem[]
-  total: number
-  dueTotal?: number
-  createdAt: string
+  receiptNumber: string;
+  date: string;
+  customerName: string;
+  customerContact: string;
+  paymentType: string;
+  paymentStatus: string;
+  notes: string;
+  items: ReceiptItem[];
+  total: number;
+  dueTotal?: number;
+  createdAt: string;
   paymentDetails?: {
-    cardNumber?: string
-    phoneNumber?: string
-  }
+    cardNumber?: string;
+    phoneNumber?: string;
+  };
   storeInfo?: {
-    name: string
-    address: string
-    contact: string
-    countryCode?: string
-  }
+    name: string;
+    address: string;
+    contact: string;
+    countryCode?: string;
+  };
 }
 
 export default function ReceiptPreview() {
-  const router = useRouter()
-  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const router = useRouter();
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchReceipt = async () => {
-      const urlParams = new URLSearchParams(window.location.search)
-      const receiptId = urlParams.get("id")
+      const receiptId = window.location.pathname.split("/").pop();
 
       if (receiptId) {
         try {
-          const response = await fetch(`/api/receipts/${receiptId}`)
-          if (!response.ok) throw new Error("Receipt not found")
-          const data = await response.json()
-          setReceiptData(data)
+          const response = await fetch(`/api/receipts/${receiptId}`);
+          if (!response.ok) throw new Error("Receipt not found");
+          const data = await response.json();
+          setReceiptData(data);
         } catch (err) {
-          router.push("/create")
+          router.push("/create");
         }
       } else {
-        router.push("/create")
+        router.push("/create");
       }
-      setLoading(false)
-    }
+      setLoading(false);
+    };
 
-    fetchReceipt()
-  }, [router])
+    fetchReceipt();
+  }, [router]);
 
   const handlePrint = () => {
-    window.print()
-  }
+    window.print();
+  };
 
   const handleDownload = () => {
     // Create a printable version
-    const receiptHtml = document.getElementById("receipt-content")?.innerHTML
-    if (!receiptHtml) return
+    const receiptHtml = document.getElementById("receipt-content")?.innerHTML;
+    if (!receiptHtml) return;
 
-    const printWindow = window.open("", "_blank")
-    if (!printWindow) return
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
 
     printWindow.document.write(`
   <html>
@@ -103,38 +102,42 @@ export default function ReceiptPreview() {
       ${receiptHtml}
     </body>
   </html>
-`)
+`);
 
-    printWindow.document.close()
-    printWindow.focus()
+    printWindow.document.close();
+    printWindow.focus();
 
     // Print and download as PDF
     setTimeout(() => {
-      printWindow.print()
-    }, 250)
-  }
+      printWindow.print();
+    }, 250);
+  };
 
   const formatCardNumberWithSpaces = (cardNumber: string) => {
     // Add spaces every 4 characters
-    let formatted = ""
+    let formatted = "";
     for (let i = 0; i < cardNumber.length; i++) {
       if (i > 0 && i % 4 === 0) {
-        formatted += " "
+        formatted += " ";
       }
-      formatted += cardNumber[i]
+      formatted += cardNumber[i];
     }
-    return formatted
-  }
+    return formatted;
+  };
 
   // Helper function to ensure values are numbers
   const ensureNumber = (value: any): number => {
-    if (value === undefined || value === null) return 0
-    const num = Number(value)
-    return isNaN(num) ? 0 : num
-  }
+    if (value === undefined || value === null) return 0;
+    const num = Number(value);
+    return isNaN(num) ? 0 : num;
+  };
 
   if (loading) {
-    return <div className="flex justify-center items-center min-h-screen">Loading...</div>
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        Loading...
+      </div>
+    );
   }
 
   if (!receiptData) {
@@ -145,26 +148,29 @@ export default function ReceiptPreview() {
           <Button className="mt-4">Create Receipt</Button>
         </Link>
       </div>
-    )
+    );
   }
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString()
-  }
+    const date = new Date(dateString);
+    return date.toLocaleDateString();
+  };
 
   // Calculate total item value (price * quantity) for all items
   const calculateTotalItemValue = () => {
     return receiptData.items.reduce((total, item) => {
-      return total + item.quantity * item.price
-    }, 0)
-  }
+      return total + item.quantity * item.price;
+    }, 0);
+  };
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-4xl">
       <div className="flex justify-between items-center mb-6">
         <Link href="/create">
-          <Button variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50">
+          <Button
+            variant="outline"
+            className="text-blue-600 border-blue-200 hover:bg-blue-50"
+          >
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Form
           </Button>
         </Link>
@@ -178,17 +184,25 @@ export default function ReceiptPreview() {
         </div>
       </div>
 
-      <Card className="p-8 shadow-lg print:shadow-none print:p-4 print:border-none" id="receipt-content">
+      <Card
+        className="p-8 shadow-lg print:shadow-none print:p-4 print:border-none"
+        id="receipt-content"
+      >
         <div className="receipt-header text-center mb-8">
           {receiptData.storeInfo?.name && (
-            <h1 className="text-2xl font-bold mb-1 print:text-xl">{receiptData.storeInfo.name}</h1>
+            <h1 className="text-2xl font-bold mb-1 print:text-xl">
+              {receiptData.storeInfo.name}
+            </h1>
           )}
           {receiptData.storeInfo?.address && (
-            <p className="text-gray-600 text-sm mb-1">{receiptData.storeInfo.address}</p>
+            <p className="text-gray-600 text-sm mb-1">
+              {receiptData.storeInfo.address}
+            </p>
           )}
           {receiptData.storeInfo?.contact && (
             <p className="text-gray-600 text-sm mb-3">
-              Contact: {receiptData.storeInfo.countryCode || "+91"} {receiptData.storeInfo.contact}
+              Contact: {receiptData.storeInfo.countryCode || "+91"}{" "}
+              {receiptData.storeInfo.contact}
             </p>
           )}
           <h2 className="text-xl font-bold mt-4 print:text-lg">RECEIPT</h2>
@@ -203,10 +217,12 @@ export default function ReceiptPreview() {
                 <span className="font-medium">Date: </span>
                 {formatDate(receiptData.date)}
               </p>
-              {(receiptData.paymentStatus === "full" || receiptData.paymentStatus === "advance") && (
+              {(receiptData.paymentStatus === "full" ||
+                receiptData.paymentStatus === "advance") && (
                 <p>
                   <span className="font-medium">Payment Method: </span>
-                  {receiptData.paymentType.charAt(0).toUpperCase() + receiptData.paymentType.slice(1)}
+                  {receiptData.paymentType.charAt(0).toUpperCase() +
+                    receiptData.paymentType.slice(1)}
                 </p>
               )}
               <p>
@@ -217,18 +233,23 @@ export default function ReceiptPreview() {
                   ? "Advance Payment (Partial)"
                   : "Due Payment"}
               </p>
-              {receiptData.paymentDetails?.cardNumber && receiptData.paymentStatus !== "due" && (
-                <p>
-                  <span className="font-medium">Card Number: </span>
-                  XXXXXXXXXXXX {formatCardNumberWithSpaces(receiptData.paymentDetails.cardNumber.slice(-4))}
-                </p>
-              )}
-              {receiptData.paymentDetails?.phoneNumber && receiptData.paymentStatus !== "due" && (
-                <p>
-                  <span className="font-medium">Phone Number: </span>
-                  XXXXXXX{receiptData.paymentDetails.phoneNumber.slice(-3)}
-                </p>
-              )}
+              {receiptData.paymentDetails?.cardNumber &&
+                receiptData.paymentStatus !== "due" && (
+                  <p>
+                    <span className="font-medium">Card Number: </span>
+                    XXXXXXXXXXXX{" "}
+                    {formatCardNumberWithSpaces(
+                      receiptData.paymentDetails.cardNumber.slice(-4)
+                    )}
+                  </p>
+                )}
+              {receiptData.paymentDetails?.phoneNumber &&
+                receiptData.paymentStatus !== "due" && (
+                  <p>
+                    <span className="font-medium">Phone Number: </span>
+                    XXXXXXX{receiptData.paymentDetails.phoneNumber.slice(-3)}
+                  </p>
+                )}
             </div>
           </div>
           <div>
@@ -274,24 +295,42 @@ export default function ReceiptPreview() {
             <tbody>
               {receiptData.items.map((item, index) => (
                 <tr key={index} className="border-b">
-                  <td className="py-2 max-w-[150px] md:max-w-none">{item.description}</td>
+                  <td className="py-2 max-w-[150px] md:max-w-none">
+                    {item.description}
+                  </td>
                   <td className="text-right py-2">{item.quantity}</td>
-                  <td className="text-right py-2">₹{ensureNumber(item.price).toFixed(2)}</td>
-                  <td className="text-right py-2">₹{ensureNumber(item.quantity * item.price).toFixed(2)}</td>
+                  <td className="text-right py-2">
+                    ₹{ensureNumber(item.price).toFixed(2)}
+                  </td>
+                  <td className="text-right py-2">
+                    ₹{ensureNumber(item.quantity * item.price).toFixed(2)}
+                  </td>
                   {receiptData.paymentStatus === "advance" && (
                     <>
-                      <td className="text-right py-2">₹{ensureNumber(item.advanceAmount).toFixed(2)}</td>
+                      <td className="text-right py-2">
+                        ₹{ensureNumber(item.advanceAmount).toFixed(2)}
+                      </td>
                       <td className="text-right py-2 font-medium">
-                        ₹{(ensureNumber(item.quantity * item.price) - ensureNumber(item.advanceAmount)).toFixed(2)}
+                        ₹
+                        {(
+                          ensureNumber(item.quantity * item.price) -
+                          ensureNumber(item.advanceAmount)
+                        ).toFixed(2)}
                       </td>
                     </>
                   )}
                   {receiptData.paymentStatus === "due" && (
                     <>
                       <td className="text-right py-2">
-                        ₹{(ensureNumber(item.quantity * item.price) - ensureNumber(item.dueAmount)).toFixed(2)}
+                        ₹
+                        {(
+                          ensureNumber(item.quantity * item.price) -
+                          ensureNumber(item.dueAmount)
+                        ).toFixed(2)}
                       </td>
-                      <td className="text-right py-2 font-medium">₹{ensureNumber(item.dueAmount).toFixed(2)}</td>
+                      <td className="text-right py-2 font-medium">
+                        ₹{ensureNumber(item.dueAmount).toFixed(2)}
+                      </td>
                     </>
                   )}
                 </tr>
@@ -301,13 +340,19 @@ export default function ReceiptPreview() {
 
           <div className="mt-4 text-right">
             {receiptData.paymentStatus === "full" && (
-              <div className="text-lg font-bold print:text-base">Total: ₹{ensureNumber(receiptData.total).toFixed(2)}</div>
+              <div className="text-lg font-bold print:text-base">
+                Total: ₹{ensureNumber(receiptData.total).toFixed(2)}
+              </div>
             )}
 
             {receiptData.paymentStatus === "advance" && (
               <>
-                <div className="text-lg font-bold print:text-base">Total Value: ₹{calculateTotalItemValue().toFixed(2)}</div>
-                <div className="text-base mt-1">Advance Paid: ₹{ensureNumber(receiptData.total).toFixed(2)}</div>
+                <div className="text-lg font-bold print:text-base">
+                  Total Value: ₹{calculateTotalItemValue().toFixed(2)}
+                </div>
+                <div className="text-base mt-1">
+                  Advance Paid: ₹{ensureNumber(receiptData.total).toFixed(2)}
+                </div>
                 <div className="text-base font-bold text-red-500 mt-1 print:text-black">
                   Balance Due: ₹{ensureNumber(receiptData.dueTotal).toFixed(2)}
                 </div>
@@ -316,9 +361,15 @@ export default function ReceiptPreview() {
 
             {receiptData.paymentStatus === "due" && (
               <>
-                <div className="text-lg font-bold print:text-base">Total Value: ₹{calculateTotalItemValue().toFixed(2)}</div>
+                <div className="text-lg font-bold print:text-base">
+                  Total Value: ₹{calculateTotalItemValue().toFixed(2)}
+                </div>
                 <div className="text-base mt-1">
-                  Already Paid: ₹{(calculateTotalItemValue() - ensureNumber(receiptData.dueTotal)).toFixed(2)}
+                  Already Paid: ₹
+                  {(
+                    calculateTotalItemValue() -
+                    ensureNumber(receiptData.dueTotal)
+                  ).toFixed(2)}
                 </div>
                 <div className="text-base font-bold text-red-500 mt-1 print:text-black">
                   Balance Due: ₹{ensureNumber(receiptData.dueTotal).toFixed(2)}
@@ -335,13 +386,18 @@ export default function ReceiptPreview() {
           </div>
         )}
 
-        {(receiptData.paymentStatus === "advance" || receiptData.paymentStatus === "due") &&
+        {(receiptData.paymentStatus === "advance" ||
+          receiptData.paymentStatus === "due") &&
           receiptData.dueTotal &&
           receiptData.dueTotal > 0 && (
             <div className="mt-4 p-3 border border-red-200 bg-red-50 rounded-md print:border-black print:bg-white">
-              <p className="text-red-700 font-medium print:text-black">Due Payment Notice</p>
+              <p className="text-red-700 font-medium print:text-black">
+                Due Payment Notice
+              </p>
               <p className="text-sm text-red-600 print:text-black">
-                A balance of ₹{ensureNumber(receiptData.dueTotal).toFixed(2)} is due for this transaction. Please ensure timely payment to avoid any inconvenience.
+                A balance of ₹{ensureNumber(receiptData.dueTotal).toFixed(2)} is
+                due for this transaction. Please ensure timely payment to avoid
+                any inconvenience.
               </p>
             </div>
           )}
@@ -352,5 +408,5 @@ export default function ReceiptPreview() {
         </div>
       </Card>
     </div>
-  )
+  );
 }

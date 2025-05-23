@@ -1,4 +1,4 @@
-// app/api/preview/[id]/route.ts
+// app/api/receipts/[id]/route.ts
 import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
 import { pool } from "@/lib/database";
@@ -44,12 +44,14 @@ interface StoreInfo {
 }
 
 // Helper function to convert database row to PaymentDetails
-function toPaymentDetails(row: mysql.RowDataPacket | undefined): PaymentDetails {
+function toPaymentDetails(
+  row: mysql.RowDataPacket | undefined
+): PaymentDetails {
   if (!row) return {};
   return {
     cardNumber: row.cardNumber || undefined,
     phoneNumber: row.phoneNumber || undefined,
-    phoneCountryCode: row.phoneCountryCode || undefined
+    phoneCountryCode: row.phoneCountryCode || undefined,
   };
 }
 
@@ -88,10 +90,7 @@ export async function GET(
     );
 
     if (receipts.length === 0) {
-      return NextResponse.json(
-        { error: "Receipt not found" }, 
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Receipt not found" }, { status: 404 });
     }
 
     const receipt = receipts[0];
@@ -132,32 +131,28 @@ export async function GET(
       total: receipt.total,
       dueTotal: receipt.due_total,
       userId: receipt.user_id,
-      items: items.map(item => ({
+      items: items.map((item) => ({
         description: item.description,
         quantity: item.quantity,
         price: item.price,
         advanceAmount: item.advanceAmount || 0,
-        dueAmount: item.dueAmount || 0
+        dueAmount: item.dueAmount || 0,
       })),
       paymentDetails: toPaymentDetails(paymentDetailsRows[0]),
       storeInfo: {
         name: receipt.storeName,
         address: receipt.storeAddress,
         contact: receipt.storeContact,
-        countryCode: receipt.storeCountryCode
-      }
+        countryCode: receipt.storeCountryCode,
+      },
     };
 
     return NextResponse.json(response);
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error 
-      ? error.message 
-      : "Failed to fetch receipt data";
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to fetch receipt data";
     console.error("Error in GET /api/preview/[id]:", error);
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   } finally {
     if (connection) {
       await connection.release();
