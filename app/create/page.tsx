@@ -204,14 +204,18 @@ export default function CreateReceipt() {
   const updateItem = (index: number, field: string, value: string | number) => {
     setReceiptData((prev) => {
       const newItems = [...prev.items];
-      const numValue =
+
+      // Handle different field types appropriately
+      const parsedValue =
         typeof value === "string"
-          ? field === "quantity"
-            ? parseInt(value) || 1
-            : parseFloat(value) || 0
+          ? field === "description"
+            ? value // Keep description as string
+            : field === "quantity"
+            ? Math.max(parseInt(value) || 1, 1) // Quantity handling
+            : parseFloat(value) || 0 // Price handling
           : value;
 
-      newItems[index] = { ...newItems[index], [field]: numValue };
+      newItems[index] = { ...newItems[index], [field]: parsedValue };
       return { ...prev, items: newItems };
     });
   };
@@ -544,13 +548,13 @@ export default function CreateReceipt() {
                     </Label>
                     <Input
                       id={`item-${index}-description`}
+                      type="text"
                       value={item.description}
                       onChange={(e) =>
                         updateItem(index, "description", e.target.value)
                       }
                       placeholder="Item description"
                       required
-                      type="text"
                     />
                     {errors[`items.${index}.description`] && (
                       <p className="text-xs text-red-500">
