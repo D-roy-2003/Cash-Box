@@ -1,8 +1,8 @@
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers"; // next/headers is valid in app directory
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-here";
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "1d";
+const JWT_SECRET = process.env.JWT_SECRET || "your-strong-secret-here";
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
 export async function signJwt(userId: string | number) {
   return jwt.sign({ userId }, JWT_SECRET, {
@@ -14,6 +14,7 @@ export async function verifyJwt(token: string) {
   try {
     return jwt.verify(token, JWT_SECRET) as { userId: number };
   } catch (error) {
+    console.error("JWT Verification Error:", error);
     throw new Error("Invalid or expired token");
   }
 }

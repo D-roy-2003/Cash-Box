@@ -253,6 +253,18 @@ export default function CreateReceipt() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const userJSON = localStorage.getItem("currentUser");
+    if (!userJSON) {
+      router.push("/login");
+      return;
+    }
+    const user = JSON.parse(userJSON);
+
+    // Add proper error handling
+    if (!user?.token) {
+      setErrors({ form: "Session expired. Please login again." });
+      return;
+    }
 
     // Additional auth check
     if (!user) {

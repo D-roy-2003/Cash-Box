@@ -50,7 +50,7 @@ export async function POST(request: Request) {
 
   try {
     // Verify and decode JWT token
-    const decoded = await verifyJwt(token) as JwtPayload;
+    const decoded = await verifyJwt(token);
     if (!decoded?.userId) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     await connection.beginTransaction();
 
     // Setup database triggers
-    await setupReceiptTriggers(connection);
+    // await setupReceiptTriggers(connection);
 
     // Create receipt and related records
     const receiptId = await createReceipt(connection, body, userId);
@@ -91,9 +91,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       receiptId,
-      message: "Receipt created successfully"
+      message: "Receipt created successfully",
     });
-
   } catch (error: unknown) {
     if (connection) {
       try {
@@ -103,12 +102,10 @@ export async function POST(request: Request) {
       }
     }
 
-    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error occurred";
     console.error("Receipt creation error:", error);
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   } finally {
     if (connection) {
       await connection.release();
@@ -142,32 +139,12 @@ function validateReceiptBody(body: ReceiptBody): string | null {
 }
 
 // Database Operations
-async function setupReceiptTriggers(connection: mysql.PoolConnection): Promise<void> {
+async function setupReceiptTriggers(
+  connection: mysql.PoolConnection
+): Promise<void> {
   try {
-    await connection.query(`
-      DROP TRIGGER IF EXISTS after_receipt_insert;
-      DROP TRIGGER IF EXISTS after_receipt_item_insert;
-      
-      CREATE TRIGGER after_receipt_insert
-      AFTER INSERT ON receipts
-      FOR EACH ROW
-      BEGIN
-        -- Your receipt trigger logic here
-        INSERT INTO receipt_audit_log 
-        (receipt_id, action, timestamp)
-        VALUES (NEW.id, 'CREATED', NOW());
-      END;
-      
-      CREATE TRIGGER after_receipt_item_insert
-      AFTER INSERT ON receipt_items
-      FOR EACH ROW
-      BEGIN
-        -- Your item trigger logic here
-        UPDATE inventory 
-        SET stock = stock - NEW.quantity
-        WHERE product_id = NEW.product_id;
-      END;
-    `);
+    // Remove all trigger creation attempts
+    await connection.query(`DROP TRIGGER IF EXISTS after_receipt_insert`);
   } catch (error) {
     console.error("Trigger setup failed:", error);
     throw new Error("Failed to setup database triggers");
@@ -195,9 +172,24 @@ async function createReceipt(
       body.notes || null,
       body.total,
       body.dueTotal,
-      userId
+      userId,
     ]
   );
+
+  // Create account transaction directly
+  await connection.query(
+    `INSERT INTO account_transactions (
+      particulars, amount, type, user_id, receipt_id
+    ) VALUES (?, ?, ?, ?, ?)`,
+    [
+      `Receipt ${body.receiptNumber}`,
+      body.total,
+      "credit",
+      userId,
+      result.insertId,
+    ]
+  );
+
   return result.insertId;
 }
 
@@ -217,7 +209,7 @@ async function processReceiptItems(
         item.quantity,
         item.price,
         item.advanceAmount ?? 0,
-        item.dueAmount ?? 0
+        item.dueAmount ?? 0,
       ]
     );
   }
@@ -236,7 +228,7 @@ async function processPaymentDetails(
       receiptId,
       paymentDetails.cardNumber || null,
       paymentDetails.phoneNumber || null,
-      paymentDetails.phoneCountryCode || null
+      paymentDetails.phoneCountryCode || null,
     ]
   );
 }
@@ -247,7 +239,7 @@ async function processDueRecords(
   body: ReceiptBody,
   userId: string
 ): Promise<void> {
-  const productOrdered = body.items.map(i => i.description).join(", ");
+  const productOrdered = body.items.map((i) => i.description).join(", ");
   const totalQuantity = body.items.reduce((sum, i) => sum + i.quantity, 0);
   const expectedPaymentDate = new Date();
   expectedPaymentDate.setDate(expectedPaymentDate.getDate() + 7);
@@ -265,9 +257,9 @@ async function processDueRecords(
       productOrdered,
       totalQuantity,
       body.dueTotal,
-      expectedPaymentDate.toISOString().split('T')[0],
+      expectedPaymentDate.toISOString().split("T")[0],
       userId,
-      body.receiptNumber
+      body.receiptNumber,
     ]
   );
 }
@@ -287,7 +279,7 @@ async function processAccountTransaction(
       body.total,
       "credit",
       userId,
-      receiptId
+      receiptId,
     ]
   );
 }
