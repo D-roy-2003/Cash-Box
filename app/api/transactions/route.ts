@@ -1,16 +1,15 @@
-// app/api/transactions/route.ts
 import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
 import { pool } from "@/lib/database";
 import { verifyJwt } from "@/lib/auth";
 
-// Type definitions
 interface Transaction {
   id: string;
   particulars: string;
   amount: number;
   type: "credit" | "debit";
   date: string;
+  receiptNumber?: string;
 }
 
 interface JwtPayload {
@@ -18,7 +17,6 @@ interface JwtPayload {
   [key: string]: any;
 }
 
-// Helper: Verify JWT from request headers
 async function verifyToken(request: Request): Promise<JwtPayload> {
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
@@ -33,7 +31,6 @@ async function verifyToken(request: Request): Promise<JwtPayload> {
   return decoded;
 }
 
-// GET /api/transactions - Fetch transactions and calculate balances
 export async function GET(request: Request) {
   let connection: mysql.PoolConnection | undefined;
 
@@ -41,30 +38,32 @@ export async function GET(request: Request) {
     const { userId } = await verifyToken(request);
     connection = await pool.getConnection();
 
-    // 1. Get all transactions
+    // Get all transactions with receipt number if available
     const [transactionRows] = await connection.query<mysql.RowDataPacket[]>(
       `SELECT 
-        id, 
-        particulars, 
-        amount, 
-        type, 
-        created_at as date
-       FROM account_transactions
-       WHERE user_id = ?
-       ORDER BY created_at DESC`,
+        t.id, 
+        t.particulars, 
+        t.amount, 
+        t.type, 
+        t.created_at as date,
+        r.receipt_number as receiptNumber
+       FROM account_transactions t
+       LEFT JOIN receipts r ON t.receipt_id = r.id
+       WHERE t.user_id = ?
+       ORDER BY t.created_at DESC`,
       [userId]
     );
 
-    // Transform transactions to match frontend expectations
     const transactions: Transaction[] = transactionRows.map(row => ({
       id: row.id.toString(),
       particulars: row.particulars || 'Unknown Transaction',
       amount: Number(row.amount) || 0,
       type: row.type === 'credit' ? 'credit' : 'debit',
-      date: row.date || new Date().toISOString()
+      date: row.date || new Date().toISOString(),
+      receiptNumber: row.receiptNumber || undefined
     }));
 
-    // 2. Calculate current account balance from transactions
+    // Calculate current account balance from transactions
     let balance = 0;
     transactions.forEach(transaction => {
       if (transaction.type === 'credit') {
@@ -74,7 +73,7 @@ export async function GET(request: Request) {
       }
     });
 
-    // 3. Calculate total due balance from unpaid due records
+    // Calculate total due balance from unpaid due records
     const [dueRows] = await connection.query<mysql.RowDataPacket[]>(
       `SELECT COALESCE(SUM(amount_due), 0) as total_due
        FROM due_records
@@ -84,21 +83,10 @@ export async function GET(request: Request) {
 
     const totalDueBalance = Number(dueRows[0]?.total_due) || 0;
 
-    // 4. Get count of unpaid due records for additional info
-    const [countRows] = await connection.query<mysql.RowDataPacket[]>(
-      `SELECT COUNT(*) as unpaid_count
-       FROM due_records
-       WHERE user_id = ? AND is_paid = FALSE`,
-      [userId]
-    );
-
-    const unpaidDueCount = Number(countRows[0]?.unpaid_count) || 0;
-
     return NextResponse.json({
       transactions,
       balance: Number(balance.toFixed(2)),
       totalDueBalance: Number(totalDueBalance.toFixed(2)),
-      unpaidDueCount,
       summary: {
         totalCredits: transactions
           .filter(t => t.type === 'credit')
@@ -125,7 +113,6 @@ export async function GET(request: Request) {
   }
 }
 
-// POST /api/transactions - Create a new transaction
 export async function POST(request: Request) {
   let connection: mysql.PoolConnection | undefined;
 
@@ -172,13 +159,15 @@ export async function POST(request: Request) {
     // Return the created transaction
     const [newTransaction] = await connection.query<mysql.RowDataPacket[]>(
       `SELECT 
-        id, 
-        particulars, 
-        amount, 
-        type, 
-        created_at as date
-       FROM account_transactions
-       WHERE id = ?`,
+        t.id, 
+        t.particulars, 
+        t.amount, 
+        t.type, 
+        t.created_at as date,
+        r.receipt_number as receiptNumber
+       FROM account_transactions t
+       LEFT JOIN receipts r ON t.receipt_id = r.id
+       WHERE t.id = ?`,
       [result.insertId]
     );
 
@@ -191,7 +180,8 @@ export async function POST(request: Request) {
         particulars: transaction.particulars,
         amount: Number(transaction.amount),
         type: transaction.type,
-        date: transaction.date
+        date: transaction.date,
+        receiptNumber: transaction.receiptNumber || undefined
       }
     }, { status: 201 });
 

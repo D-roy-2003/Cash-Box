@@ -1,10 +1,8 @@
-// app/api/due/route.ts
 import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
 import { pool } from "@/lib/database";
 import { verifyJwt } from "@/lib/auth";
 
-// Type definitions
 interface DueRecord {
   id: number;
   customer_name: string;
@@ -18,7 +16,6 @@ interface DueRecord {
   is_paid: boolean;
   paid_at?: string | null;
   receipt_number?: string;
-  [key: string]: any;
 }
 
 interface AccountTransaction {
@@ -38,7 +35,6 @@ interface PaymentRequest {
   id: number;
 }
 
-// Helper: Verify JWT from request headers
 async function verifyToken(request: Request): Promise<JwtPayload> {
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
@@ -53,7 +49,6 @@ async function verifyToken(request: Request): Promise<JwtPayload> {
   return decoded;
 }
 
-// GET /api/due - Fetch unpaid dues with all required fields
 export async function GET(request: Request) {
   let connection: mysql.PoolConnection | undefined;
 
@@ -61,7 +56,6 @@ export async function GET(request: Request) {
     const { userId } = await verifyToken(request);
     connection = await pool.getConnection();
 
-    // Enhanced query to get all required fields
     const [dueRecords] = await connection.query<mysql.RowDataPacket[]>(
       `SELECT 
         id, 
@@ -82,7 +76,6 @@ export async function GET(request: Request) {
       [userId]
     );
 
-    // Transform the data to match frontend expectations
     const transformedRecords = dueRecords.map(record => ({
       id: record.id.toString(),
       customerName: record.customer_name || 'Unknown Customer',
@@ -114,7 +107,6 @@ export async function GET(request: Request) {
   }
 }
 
-// PUT /api/due - Mark a due as paid and create a transaction
 export async function PUT(request: Request) {
   let connection: mysql.PoolConnection | undefined;
 
@@ -145,7 +137,7 @@ export async function PUT(request: Request) {
     try {
       // 1. Get the due record details first (before updating)
       const [dueRecords] = await connection.query<mysql.RowDataPacket[]>(
-        `SELECT customer_name, amount_due, is_paid
+        `SELECT customer_name, amount_due, is_paid, receipt_number
          FROM due_records 
          WHERE id = ? AND user_id = ?`,
         [dueId, userId]
@@ -169,14 +161,13 @@ export async function PUT(request: Request) {
         [dueId, userId]
       );
 
-      // Check if the record was actually updated
       if (updateResult.affectedRows === 0) {
         throw new Error("Failed to update due record");
       }
 
       // 3. Create the transaction record
       const transactionData: AccountTransaction = {
-        particulars: `Payment received from ${dueRecord.customer_name}`,
+        particulars: `Payment received from ${dueRecord.customer_name}${dueRecord.receipt_number ? ` (Receipt: ${dueRecord.receipt_number})` : ''}`,
         amount: Number(dueRecord.amount_due),
         type: "credit",
         user_id: userId,

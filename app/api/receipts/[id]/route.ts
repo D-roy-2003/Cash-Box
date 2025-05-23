@@ -1,9 +1,7 @@
-// app/api/receipts/[id]/route.ts
 import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
 import { pool } from "@/lib/database";
 
-// Type definitions
 interface ReceiptPreview {
   receiptId: string | number;
   receiptNumber: string;
@@ -45,26 +43,42 @@ interface StoreInfo {
   countryCode: string;
 }
 
-// Helper function to format date for MySQL insertion
 function formatDateForMySQL(date: Date | string): string {
   const d = new Date(date);
-  if (isNaN(d.getTime())) {
-    throw new Error("Invalid date format");
-  }
-  // Format as MySQL DATETIME: YYYY-MM-DD HH:MM:SS (remove milliseconds and 'T')
-  return d.toISOString().slice(0, 19).replace('T', ' ');
+  if (isNaN(d.getTime())) throw new Error("Invalid date format");
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0') + ' ' +
+    String(d.getHours()).padStart(2, '0') + ':' +
+    String(d.getMinutes()).padStart(2, '0') + ':' +
+    String(d.getSeconds()).padStart(2, '0');
 }
 
-// Helper function to format date for API response
+// Updated function to return local system time instead of UTC
 function formatDateForResponse(date: Date | string): string {
   const d = new Date(date);
-  if (isNaN(d.getTime())) {
-    throw new Error("Invalid date format");
-  }
-  return d.toISOString();
+  if (isNaN(d.getTime())) throw new Error("Invalid date format");
+  
+  // Return local time in ISO format instead of UTC
+  const offset = d.getTimezoneOffset() * 60000; // offset in milliseconds
+  const localTime = new Date(d.getTime() - offset);
+  return localTime.toISOString().slice(0, -1); // Remove 'Z' to indicate local time
 }
 
-// Helper function to convert database row to PaymentDetails
+// Alternative function that returns a more readable local format
+function formatDateForResponseLocal(date: Date | string): string {
+  const d = new Date(date);
+  if (isNaN(d.getTime())) throw new Error("Invalid date format");
+  
+  // Return in local format: YYYY-MM-DD HH:MM:SS
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0') + ' ' +
+    String(d.getHours()).padStart(2, '0') + ':' +
+    String(d.getMinutes()).padStart(2, '0') + ':' +
+    String(d.getSeconds()).padStart(2, '0');
+}
+
 function toPaymentDetails(
   row: mysql.RowDataPacket | undefined
 ): PaymentDetails {
@@ -80,7 +94,6 @@ export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  // Validate receipt ID parameter
   if (!params.id || !/^\d+$/.test(params.id)) {
     return NextResponse.json(
       { error: "Invalid receipt ID format" },
@@ -93,7 +106,6 @@ export async function GET(
   try {
     connection = await pool.getConnection();
 
-    // Get receipt with store info - including proper datetime fields
     const [receipts] = await connection.query<mysql.RowDataPacket[]>(
       `SELECT 
         r.id, r.receipt_number, 
@@ -119,7 +131,6 @@ export async function GET(
 
     const receipt = receipts[0];
 
-    // Get receipt items
     const [items] = await connection.query<mysql.RowDataPacket[]>(
       `SELECT 
         description, quantity, price, 
@@ -130,7 +141,6 @@ export async function GET(
       [params.id]
     );
 
-    // Get payment details
     const [paymentDetailsRows] = await connection.query<mysql.RowDataPacket[]>(
       `SELECT 
         card_number AS cardNumber, 
@@ -141,13 +151,15 @@ export async function GET(
       [params.id]
     );
 
-    // Compose final result with proper date formatting
     const response: ReceiptPreview = {
       receiptId: receipt.id,
       receiptNumber: receipt.receipt_number,
-      date: receipt.date, // This is now formatted as YYYY-MM-DD
-      createdAt: formatDateForResponse(receipt.created_at),
-      updatedAt: receipt.updated_at ? formatDateForResponse(receipt.updated_at) : undefined,
+      date: receipt.date,
+      // Using the updated function to return local system time
+      createdAt: formatDateForResponseLocal(receipt.created_at),
+      updatedAt: receipt.updated_at
+        ? formatDateForResponseLocal(receipt.updated_at)
+        : undefined,
       customerName: receipt.customer_name,
       customerContact: receipt.customer_contact,
       customerCountryCode: receipt.customer_country_code,
@@ -186,7 +198,6 @@ export async function GET(
   }
 }
 
-// If you have a POST or PUT method that's causing the datetime error, here's how to fix it:
 export async function POST(request: Request) {
   let connection: mysql.PoolConnection | undefined;
 
@@ -194,12 +205,13 @@ export async function POST(request: Request) {
     const body = await request.json();
     connection = await pool.getConnection();
 
-    // When inserting, use the MySQL-formatted date
-    const now = formatDateForMySQL(new Date());
-    
-    // Also format the date field if it's coming from the request
-    const formattedDate = body.date ? formatDateForMySQL(body.date) : formatDateForMySQL(new Date());
-    
+    // Get current local system time
+    const now = new Date();
+    const formattedNow = formatDateForMySQL(now);
+    const formattedDate = body.date
+      ? formatDateForMySQL(body.date)
+      : formattedNow;
+
     const [result] = await connection.query<mysql.ResultSetHeader>(
       `INSERT INTO receipts (
         receipt_number, date, customer_name, customer_contact, 
@@ -208,7 +220,7 @@ export async function POST(request: Request) {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         body.receiptNumber,
-        formattedDate, // Use formatted date instead of body.date
+        formattedDate,
         body.customerName,
         body.customerContact,
         body.customerCountryCode,
@@ -218,8 +230,8 @@ export async function POST(request: Request) {
         body.total,
         body.dueTotal,
         body.userId,
-        now, // created_at - properly formatted
-        now  // updated_at - properly formatted
+        formattedNow,
+        formattedNow,
       ]
     );
 
