@@ -43,7 +43,13 @@ export function Footer() {
           <div className="text-center">
             <h3 className="text-sm font-medium mb-2">Developer Team</h3>
             <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-gray-300">
-              <span>Subhobrata Maity</span>
+              <Link 
+                href="https://www.linkedin.com/in/subhobrata-maity-260b16259/" 
+                target="_blank"
+                className="text-gray-300 hover:text-white hover:underline"
+              >
+                Subhobrata Maity
+              </Link>
               <span>•</span>
               <span>Gourav Majumder</span>
               <span>•</span>
