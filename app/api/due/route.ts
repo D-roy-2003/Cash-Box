@@ -8,10 +8,16 @@ import { verifyJwt } from "@/lib/auth";
 interface DueRecord {
   id: number;
   customer_name: string;
+  customer_contact: string;
+  customer_country_code: string;
+  product_ordered: string;
+  quantity: number;
   amount_due: number;
   expected_payment_date: string;
+  created_at: string;
   is_paid: boolean;
   paid_at?: string | null;
+  receipt_number?: string;
   [key: string]: any;
 }
 
@@ -47,7 +53,7 @@ async function verifyToken(request: Request): Promise<JwtPayload> {
   return decoded;
 }
 
-// GET /api/due - Fetch unpaid dues
+// GET /api/due - Fetch unpaid dues with all required fields
 export async function GET(request: Request) {
   let connection: mysql.PoolConnection | undefined;
 
@@ -55,22 +61,44 @@ export async function GET(request: Request) {
     const { userId } = await verifyToken(request);
     connection = await pool.getConnection();
 
-    // Type-safe query
+    // Enhanced query to get all required fields
     const [dueRecords] = await connection.query<mysql.RowDataPacket[]>(
       `SELECT 
         id, 
-        customer_name, 
+        customer_name,
+        customer_contact,
+        customer_country_code,
+        product_ordered,
+        quantity,
         amount_due, 
         expected_payment_date,
+        created_at,
         is_paid,
-        paid_at
+        paid_at,
+        receipt_number
        FROM due_records
        WHERE user_id = ? AND is_paid = FALSE
        ORDER BY expected_payment_date ASC`,
       [userId]
     );
 
-    return NextResponse.json(dueRecords as DueRecord[]);
+    // Transform the data to match frontend expectations
+    const transformedRecords = dueRecords.map(record => ({
+      id: record.id.toString(),
+      customerName: record.customer_name || 'Unknown Customer',
+      customerContact: record.customer_contact || '',
+      customerCountryCode: record.customer_country_code || '+91',
+      productOrdered: record.product_ordered || 'Unknown Product',
+      quantity: Number(record.quantity) || 0,
+      amountDue: Number(record.amount_due) || 0,
+      expectedPaymentDate: record.expected_payment_date || new Date().toISOString(),
+      createdAt: record.created_at || new Date().toISOString(),
+      isPaid: Boolean(record.is_paid),
+      paidAt: record.paid_at || null,
+      receiptNumber: record.receipt_number || null
+    }));
+
+    return NextResponse.json(transformedRecords);
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Database error";
     console.error("[GET] /api/due error:", error);
@@ -95,9 +123,18 @@ export async function PUT(request: Request) {
     const requestData: PaymentRequest = await request.json();
 
     // Validate ID
-    if (typeof requestData.id !== "number" || requestData.id <= 0) {
+    if (!requestData.id || (typeof requestData.id !== "number" && typeof requestData.id !== "string")) {
       return NextResponse.json(
         { error: "Invalid due record ID" },
+        { status: 400 }
+      );
+    }
+
+    const dueId = typeof requestData.id === "string" ? parseInt(requestData.id) : requestData.id;
+    
+    if (isNaN(dueId) || dueId <= 0) {
+      return NextResponse.json(
+        { error: "Invalid due record ID format" },
         { status: 400 }
       );
     }
@@ -106,45 +143,50 @@ export async function PUT(request: Request) {
     await connection.beginTransaction();
 
     try {
-      // 1. Mark the due record as paid
-      const [updateResult] = await connection.query<mysql.ResultSetHeader>(
-        `UPDATE due_records 
-         SET is_paid = TRUE, paid_at = NOW()
-         WHERE id = ? AND user_id = ? AND is_paid = FALSE`,
-        [requestData.id, userId]
-      );
-
-      // Check if the record was actually updated
-      if (updateResult.affectedRows === 0) {
-        throw new Error("Due record not found or already paid");
-      }
-
-      // 2. Get the due record details for the transaction
+      // 1. Get the due record details first (before updating)
       const [dueRecords] = await connection.query<mysql.RowDataPacket[]>(
-        `SELECT customer_name, amount_due 
-         FROM due_records WHERE id = ? LIMIT 1`,
-        [requestData.id]
+        `SELECT customer_name, amount_due, is_paid
+         FROM due_records 
+         WHERE id = ? AND user_id = ?`,
+        [dueId, userId]
       );
 
       if (dueRecords.length === 0) {
-        throw new Error("Due record details not found");
+        throw new Error("Due record not found");
       }
 
       const dueRecord = dueRecords[0];
 
+      if (dueRecord.is_paid) {
+        throw new Error("Due record is already paid");
+      }
+
+      // 2. Mark the due record as paid
+      const [updateResult] = await connection.query<mysql.ResultSetHeader>(
+        `UPDATE due_records 
+         SET is_paid = TRUE, paid_at = NOW()
+         WHERE id = ? AND user_id = ? AND is_paid = FALSE`,
+        [dueId, userId]
+      );
+
+      // Check if the record was actually updated
+      if (updateResult.affectedRows === 0) {
+        throw new Error("Failed to update due record");
+      }
+
       // 3. Create the transaction record
       const transactionData: AccountTransaction = {
-        particulars: `Payment from ${dueRecord.customer_name}`,
-        amount: dueRecord.amount_due,
+        particulars: `Payment received from ${dueRecord.customer_name}`,
+        amount: Number(dueRecord.amount_due),
         type: "credit",
         user_id: userId,
-        due_record_id: requestData.id,
+        due_record_id: dueId,
       };
 
       await connection.query(
         `INSERT INTO account_transactions
-         (particulars, amount, type, user_id, due_record_id)
-         VALUES (?, ?, ?, ?, ?)`,
+         (particulars, amount, type, user_id, due_record_id, created_at)
+         VALUES (?, ?, ?, ?, ?, NOW())`,
         [
           transactionData.particulars,
           transactionData.amount,
@@ -158,7 +200,8 @@ export async function PUT(request: Request) {
       
       return NextResponse.json({ 
         success: true,
-        message: "Payment processed successfully"
+        message: "Payment processed successfully",
+        amountProcessed: transactionData.amount
       });
     } catch (error) {
       await connection.rollback();
@@ -174,7 +217,8 @@ export async function PUT(request: Request) {
     return NextResponse.json(
       { error: errorMessage },
       {
-        status: error instanceof Error && error.message.includes("Unauthorized") 
+        status: error instanceof Error && 
+               (error.message.includes("Unauthorized") || error.message.includes("Invalid token"))
           ? 401 
           : 400
       }
