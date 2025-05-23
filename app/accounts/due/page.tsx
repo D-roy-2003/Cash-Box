@@ -65,7 +65,24 @@ export default function DuePage() {
         if (!response.ok) throw new Error('Failed to fetch due records')
         
         const data = await response.json()
-        setDueRecords(data)
+        
+        // Ensure all records have proper data structure with default values
+        const sanitizedRecords = data.map((record: any) => ({
+          id: record.id || '',
+          customerName: record.customerName || 'Unknown Customer',
+          customerContact: record.customerContact || '',
+          customerCountryCode: record.customerCountryCode || '+91',
+          productOrdered: record.productOrdered || 'Unknown Product',
+          quantity: Number(record.quantity) || 0,
+          amountDue: Number(record.amountDue) || 0,
+          expectedPaymentDate: record.expectedPaymentDate || new Date().toISOString(),
+          createdAt: record.createdAt || new Date().toISOString(),
+          isPaid: Boolean(record.isPaid),
+          paidAt: record.paidAt,
+          receiptNumber: record.receiptNumber
+        }))
+        
+        setDueRecords(sanitizedRecords)
       } catch (error) {
         console.error('Fetch error:', error)
         toast.error('Failed to load due records')
@@ -105,18 +122,34 @@ export default function DuePage() {
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
+    try {
+      if (!dateString) return 'N/A'
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      })
+    } catch (error) {
+      return 'Invalid Date'
+    }
   }
 
   const isPastDue = (dateString: string) => {
-    const dueDate = new Date(dateString)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    return dueDate < today
+    try {
+      if (!dateString) return false
+      const dueDate = new Date(dateString)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      return dueDate < today
+    } catch (error) {
+      return false
+    }
+  }
+
+  // Helper function to safely format currency
+  const formatCurrency = (amount: number | undefined | null) => {
+    const safeAmount = Number(amount) || 0
+    return `₹${safeAmount.toFixed(2)}`
   }
 
   if (isLoading) {
@@ -196,7 +229,7 @@ export default function DuePage() {
                           {record.quantity}
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap text-sm text-right font-medium text-red-600">
-                          ₹{record.amountDue.toFixed(2)}
+                          {formatCurrency(record.amountDue)}
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                           <span className={isPastDue(record.expectedPaymentDate) && !record.isPaid ? "text-red-600 font-medium" : ""}>
@@ -267,7 +300,7 @@ export default function DuePage() {
                           <p className="text-xs text-gray-400">Receipt: #{record.receiptNumber}</p>
                         )}
                       </div>
-                      <span className="font-bold text-red-600">₹{record.amountDue.toFixed(2)}</span>
+                      <span className="font-bold text-red-600">{formatCurrency(record.amountDue)}</span>
                     </div>
 
                     <div className="flex justify-between items-center text-xs text-gray-500 mb-3">
