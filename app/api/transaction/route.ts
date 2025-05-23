@@ -1,99 +1,214 @@
 // app/api/transactions/route.ts
-
 import { NextResponse } from "next/server";
+import mysql from "mysql2/promise";
 import { pool } from "@/lib/database";
 import { verifyJwt } from "@/lib/auth";
-import { RowDataPacket } from "mysql2/promise";
 
-interface BalanceResult extends RowDataPacket {
-  balance: number;
-  total_due_balance: number;
-}
-
-interface Transaction extends RowDataPacket {
-  id: number;
+// Type definitions
+interface Transaction {
+  id: string;
   particulars: string;
   amount: number;
-  type: string;
-  user_id: number;
-  transaction_date: string;
+  type: "credit" | "debit";
+  date: string;
 }
 
-export async function GET(request: Request) {
-  const token = request.headers.get("authorization")?.split(" ")[1];
-  if (!token)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+interface JwtPayload {
+  userId: string | number;
+  [key: string]: any;
+}
 
-  let connection;
+// Helper: Verify JWT from request headers
+async function verifyToken(request: Request): Promise<JwtPayload> {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    throw new Error("Authorization header missing or invalid");
+  }
+
+  const token = authHeader.split(" ")[1];
+  const decoded = await verifyJwt(token) as JwtPayload;
+  if (!decoded?.userId) {
+    throw new Error("Invalid token");
+  }
+  return decoded;
+}
+
+// GET /api/transactions - Fetch transactions and calculate balances
+export async function GET(request: Request) {
+  let connection: mysql.PoolConnection | undefined;
+
   try {
-    const decoded = await verifyJwt(token);
+    const { userId } = await verifyToken(request);
     connection = await pool.getConnection();
 
-    const [transactions] = await connection.query<Transaction[]>(
-      `SELECT * FROM account_transactions
-       WHERE user_id = ? ORDER BY transaction_date DESC`,
-      [decoded.userId]
+    // 1. Get all transactions
+    const [transactionRows] = await connection.query<mysql.RowDataPacket[]>(
+      `SELECT 
+        id, 
+        particulars, 
+        amount, 
+        type, 
+        created_at as date
+       FROM account_transactions
+       WHERE user_id = ?
+       ORDER BY created_at DESC`,
+      [userId]
     );
 
-    const [balanceResult] = await connection.query<BalanceResult[]>(
-      `SELECT balance, total_due_balance FROM account_balances
-       WHERE user_id = ?`,
-      [decoded.userId]
+    // Transform transactions to match frontend expectations
+    const transactions: Transaction[] = transactionRows.map(row => ({
+      id: row.id.toString(),
+      particulars: row.particulars || 'Unknown Transaction',
+      amount: Number(row.amount) || 0,
+      type: row.type === 'credit' ? 'credit' : 'debit',
+      date: row.date || new Date().toISOString()
+    }));
+
+    // 2. Calculate current account balance from transactions
+    let balance = 0;
+    transactions.forEach(transaction => {
+      if (transaction.type === 'credit') {
+        balance += transaction.amount;
+      } else {
+        balance -= transaction.amount;
+      }
+    });
+
+    // 3. Calculate total due balance from unpaid due records
+    const [dueRows] = await connection.query<mysql.RowDataPacket[]>(
+      `SELECT COALESCE(SUM(amount_due), 0) as total_due
+       FROM due_records
+       WHERE user_id = ? AND is_paid = FALSE`,
+      [userId]
     );
 
-    const balanceRow = balanceResult[0] || { balance: 0, total_due_balance: 0 };
+    const totalDueBalance = Number(dueRows[0]?.total_due) || 0;
+
+    // 4. Get count of unpaid due records for additional info
+    const [countRows] = await connection.query<mysql.RowDataPacket[]>(
+      `SELECT COUNT(*) as unpaid_count
+       FROM due_records
+       WHERE user_id = ? AND is_paid = FALSE`,
+      [userId]
+    );
+
+    const unpaidDueCount = Number(countRows[0]?.unpaid_count) || 0;
 
     return NextResponse.json({
       transactions,
-      balance: balanceRow.balance,
-      totalDueBalance: balanceRow.total_due_balance,
+      balance: Number(balance.toFixed(2)),
+      totalDueBalance: Number(totalDueBalance.toFixed(2)),
+      unpaidDueCount,
+      summary: {
+        totalCredits: transactions
+          .filter(t => t.type === 'credit')
+          .reduce((sum, t) => sum + t.amount, 0),
+        totalDebits: transactions
+          .filter(t => t.type === 'debit')
+          .reduce((sum, t) => sum + t.amount, 0),
+        transactionCount: transactions.length
+      }
     });
 
-  } catch (error) {
-    console.error("GET /transactions error:", error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Database error";
+    console.error("[GET] /api/transactions error:", error);
+    
     return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+      { error: errorMessage },
+      {
+        status: error instanceof Error && error.message.includes("Unauthorized") ? 401 : 500
+      }
     );
   } finally {
     if (connection) await connection.release();
   }
 }
 
+// POST /api/transactions - Create a new transaction
 export async function POST(request: Request) {
-  const token = request.headers.get("authorization")?.split(" ")[1];
-  if (!token)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let connection: mysql.PoolConnection | undefined;
 
-  let connection;
   try {
-    const decoded = await verifyJwt(token);
+    const { userId } = await verifyToken(request);
     const { particulars, amount, type } = await request.json();
 
-    if (
-      !particulars ||
-      typeof particulars !== "string" ||
-      typeof amount !== "number" ||
-      !["credit", "debit"].includes(type)
-    ) {
-      return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+    // Validate input
+    if (!particulars || typeof particulars !== 'string' || particulars.trim().length === 0) {
+      return NextResponse.json(
+        { error: "Particulars is required and must be a non-empty string" },
+        { status: 400 }
+      );
+    }
+
+    if (!amount || typeof amount !== 'number' || amount <= 0) {
+      return NextResponse.json(
+        { error: "Amount must be a positive number" },
+        { status: 400 }
+      );
+    }
+
+    if (!type || !['credit', 'debit'].includes(type)) {
+      return NextResponse.json(
+        { error: "Type must be either 'credit' or 'debit'" },
+        { status: 400 }
+      );
     }
 
     connection = await pool.getConnection();
 
-    await connection.query(
-      `INSERT INTO account_transactions (particulars, amount, type, user_id)
-       VALUES (?, ?, ?, ?)`,
-      [particulars, amount, type, decoded.userId]
+    // Insert the new transaction
+    const [result] = await connection.query<mysql.ResultSetHeader>(
+      `INSERT INTO account_transactions 
+       (particulars, amount, type, user_id, created_at)
+       VALUES (?, ?, ?, ?, NOW())`,
+      [particulars.trim(), amount, type, userId]
     );
 
-    return NextResponse.json({ success: true });
+    if (result.affectedRows === 0) {
+      throw new Error("Failed to create transaction");
+    }
 
-  } catch (error) {
-    console.error("POST /transactions error:", error);
+    // Return the created transaction
+    const [newTransaction] = await connection.query<mysql.RowDataPacket[]>(
+      `SELECT 
+        id, 
+        particulars, 
+        amount, 
+        type, 
+        created_at as date
+       FROM account_transactions
+       WHERE id = ?`,
+      [result.insertId]
+    );
+
+    const transaction = newTransaction[0];
+    
+    return NextResponse.json({
+      success: true,
+      transaction: {
+        id: transaction.id.toString(),
+        particulars: transaction.particulars,
+        amount: Number(transaction.amount),
+        type: transaction.type,
+        date: transaction.date
+      }
+    }, { status: 201 });
+
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : "Failed to create transaction";
+    
+    console.error("[POST] /api/transactions error:", error);
+    
     return NextResponse.json(
-      { error: "Failed to create transaction" },
-      { status: 500 }
+      { error: errorMessage },
+      {
+        status: error instanceof Error && error.message.includes("Unauthorized") 
+          ? 401 
+          : 400
+      }
     );
   } finally {
     if (connection) await connection.release();
