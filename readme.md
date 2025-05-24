@@ -41,11 +41,13 @@ A simple, performant finance management web app built with Next.js, TypeScript, 
 3. **Set up environment variables**
    Copy `.env.example` to `.env` and provide:
    ```ini
+   DB_PORT=3306
    DB_HOST=localhost
    DB_USER=root
    DB_PASSWORD=your_password
    DB_NAME=cash_box_db
-   NEXTAUTH_SECRET=a_random_secret
+   JWT_SECRET=your_jwt_secret
+   JWT_EXPIRES_IN=1d
    ```
 4. **Initialize the database**
    ```bash
