@@ -1,6 +1,8 @@
-# Cash-Box Finance Manager
+# Cash-Box
 
-**A simple, performant finance management web app** built with Next.js, TypeScript, Tailwind CSS, and MySQL.
+**Create professional receipts and maintain accounts for your business in seconds.**
+
+A simple, performant finance management web app built with Next.js, TypeScript, Tailwind CSS, and MySQL.
 
 ---
 
@@ -29,6 +31,40 @@
 
 1. **Clone the repo**
    ```bash
-   git clone https://github.com/yourusername/cash-box.git
+   git clone https://github.com/subho2010/Cash-Box.git
    cd cash-box
    ```
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+3. **Set up environment variables**
+   Copy `.env.example` to `.env` and provide:
+   ```ini
+   DB_HOST=localhost
+   DB_USER=root
+   DB_PASSWORD=your_password
+   DB_NAME=cash_box_db
+   NEXTAUTH_SECRET=a_random_secret
+   ```
+4. **Initialize the database**
+   ```bash
+   # Create MySQL database
+   mysql -u root -p -e "CREATE DATABASE cash_box_db;"
+   ```
+
+---
+
+## 🚀 Running Locally
+
+```bash
+# Development mode
+npm run dev
+# Production build
+npm run build
+npm start
+```
+
+Then, open http://localhost:3000 in your browser.
+
+_Happy budgeting!_
