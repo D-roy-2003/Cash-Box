@@ -7,6 +7,7 @@ import { initializeDatabase } from "@/lib/database";
 
 interface UserProfile {
   id: string | number;
+  superkey: string; 
   name: string;
   email: string;
   createdAt: string;
@@ -51,7 +52,7 @@ export async function GET(request: Request) {
 
     const [users] = await connection.query(
       `SELECT 
-        id, name, email, 
+        id, superkey, name, email, 
         created_at AS createdAt,
         store_name AS storeName, 
         store_address AS storeAddress, 
@@ -178,7 +179,7 @@ export async function PUT(request: Request) {
     // Get the updated user profile
     const [updatedUser] = await connection.query(
       `SELECT 
-        id, name, email,
+        id, superkey, name, email,
         created_at AS createdAt,
         store_name AS storeName, 
         store_address AS storeAddress, 

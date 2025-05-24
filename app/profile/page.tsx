@@ -28,6 +28,7 @@ import {
 
 interface UserProfile {
   id: string;
+  superkey: string;  
   name: string;
   createdAt: string;
   storeName: string;
@@ -679,6 +680,37 @@ export default function ProfilePage() {
                 )}
 
                 <form onSubmit={handleUpdateProfile} className="space-y-4">
+                  <div className="space-y-2"></div>
+<div className="space-y-2">
+  <Label htmlFor="superkey">Super Key</Label>
+  <div className="relative">
+    <Input
+      id="superkey"
+      type="text"
+      value={user?.superkey || ''}
+      readOnly
+      className="bg-gray-100 cursor-not-allowed pr-10"
+    />
+    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        className="h-5 w-5 text-gray-400"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+      >
+        <path
+          fillRule="evenodd"
+          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
+          clipRule="evenodd"
+        />
+      </svg>
+    </div>
+  </div>
+  <p className="text-sm text-gray-500">
+    This is your unique identifier and cannot be changed
+  </p>
+</div>
+
                   <div className="space-y-2">
                     <Label htmlFor="name">Full Name *</Label>
                     <Input

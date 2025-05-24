@@ -2,19 +2,27 @@ import { NextResponse } from "next/server";
 import { pool } from "@/lib/database";
 import bcrypt from "bcryptjs";
 import { signJwt } from "@/lib/auth";
-import { initializeDatabase } from "@/lib/database";
+import type { ResultSetHeader } from "mysql2/promise";
 
-interface SignupRequestBody {
+interface UserData {
   name: string;
   email: string;
   password: string;
 }
 
+function generateSuperkey(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < 5; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 export async function POST(request: Request) {
-  await initializeDatabase();
   let connection;
   try {
-    // Verify content type
+    // Validate request
     const contentType = request.headers.get("content-type");
     if (!contentType?.includes("application/json")) {
       return NextResponse.json(
@@ -23,71 +31,78 @@ export async function POST(request: Request) {
       );
     }
 
-    const { name, email, password } =
-      (await request.json()) as SignupRequestBody;
-
+    const { name, email, password } = (await request.json()) as Partial<UserData>;
+    
     // Validate input
     if (!name?.trim() || !email?.trim() || !password) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Missing required fields (name, email, password)" },
         { status: 400 }
       );
     }
 
     connection = await pool.getConnection();
+    await connection.beginTransaction();
 
-    // Check for existing user
-    const [existing] = await connection.execute(
-      "SELECT id FROM users WHERE email = ?",
-      [email]
-    );
+    try {
+      let superkey;
+      let userCreated = false;
+      let attempts = 0;
+      const maxAttempts = 10;
 
-    if (Array.isArray(existing) && existing.length > 0) {
+      // Retry loop for superkey uniqueness
+      while (!userCreated && attempts < maxAttempts) {
+        attempts++;
+        superkey = generateSuperkey();
+
+        try {
+          const [result] = await connection.execute<ResultSetHeader>(
+            `INSERT INTO users (name, email, password, superkey) 
+             VALUES (?, ?, ?, ?)`,
+            [name.trim(), email.trim(), await bcrypt.hash(password, 10), superkey]
+          );
+
+          if (result.affectedRows === 1) {
+            userCreated = true;
+            await connection.commit();
+
+            return NextResponse.json(
+              {
+                id: result.insertId,
+                name: name.trim(),
+                email: email.trim(),
+                superkey,
+                token: await signJwt(result.insertId),
+              },
+              { status: 201 }
+            );
+          }
+        } catch (error: any) {
+          if (error.code === 'ER_DUP_ENTRY' && error.message.includes('superkey')) {
+            // Superkey collision, try again
+            continue;
+          }
+          throw error; // Re-throw other errors
+        }
+      }
+
+      throw new Error("Failed to generate unique superkey after maximum attempts");
+    } catch (error: any) {
+      await connection.rollback();
+      
+      if (error.code === 'ER_DUP_ENTRY' && error.message.includes('email')) {
+        return NextResponse.json(
+          { error: "Email already exists" },
+          { status: 409 }
+        );
+      }
+
+      console.error("Signup error:", error);
       return NextResponse.json(
-        { error: "Email already exists" },
-        { status: 409 }
-      );
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create user
-    const [result] = await connection.execute(
-      "INSERT INTO users (name, email, password) VALUES (?, ?, ?)",
-      [name.trim(), email.trim(), hashedPassword]
-    );
-
-    const insertId = (result as any).insertId;
-    if (!insertId) {
-      return NextResponse.json(
-        { error: "Failed to create user" },
+        { error: error.message || "Registration failed" },
         { status: 500 }
       );
     }
-
-    // Initialize account
-    await connection.execute(
-      "INSERT INTO account_balances (user_id, balance) VALUES (?, ?)",
-      [insertId, 0]
-    );
-
-    return NextResponse.json(
-      {
-        id: insertId,
-        name: name.trim(),
-        email: email.trim(),
-        token: await signJwt(insertId),
-        createdAt: new Date().toISOString(),
-      },
-      { status: 201 }
-    );
-  } catch (error) {
-    console.error("Signup error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
   } finally {
     if (connection) await connection.release();
   }

@@ -17,6 +17,15 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ArrowLeft, AlertCircle } from "lucide-react";
 
+const generateSuperkey = (): string => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < 5; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
 export default function SignupPage() {
   const router = useRouter();
   const [formData, setFormData] = useState({
@@ -52,14 +61,30 @@ export default function SignupPage() {
 
     const { name, email, password, confirmPassword } = formData;
 
+    // Debug: Log form values
+    console.log("Current form values:", {
+      name,
+      email,
+      password: password ? "*****" : "empty",
+      confirmPassword: confirmPassword ? "*****" : "empty"
+    });
+
     // Validation
-    if (!name.trim() || !email.trim() || !password || !confirmPassword) {
-      setError("All fields are required");
+    if (!name?.trim() || !email?.trim() || !password || !confirmPassword) {
+      const missingFields = [];
+      if (!name?.trim()) missingFields.push("name");
+      if (!email?.trim()) missingFields.push("email");
+      if (!password) missingFields.push("password");
+      if (!confirmPassword) missingFields.push("confirmPassword");
+      
+      console.error("Missing fields:", missingFields);
+      setError(`Missing required fields: ${missingFields.join(", ")}`);
       setLoading(false);
       return;
     }
 
     if (password !== confirmPassword) {
+      console.error("Password mismatch");
       setError("Passwords do not match");
       setLoading(false);
       return;
@@ -67,35 +92,54 @@ export default function SignupPage() {
 
     const pwdError = validatePassword(password);
     if (pwdError) {
+      console.error("Password validation failed:", pwdError);
       setError(pwdError);
       setLoading(false);
       return;
     }
 
     try {
+      // Generate superkey after all validations pass
+      const superkey = generateSuperkey();
+      console.log("Generated superkey:", superkey);
+
+      const payload = {
+        name: name.trim(),
+        email: email.trim(),
+        password: password,
+        superkey: superkey
+      };
+
+      console.log("Final payload being sent:", payload);
+
+      // Verify payload before sending
+      if (!payload.name || !payload.email || !payload.password || !payload.superkey) {
+        throw new Error("Payload validation failed - missing fields");
+      }
+
       const response = await fetch(`${window.location.origin}/api/signup`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Accept: "application/json",
         },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify(payload),
       });
 
-      // Check content type before parsing
-      const contentType = response.headers.get("content-type");
-      if (!contentType?.includes("application/json")) {
-        const text = await response.text();
-        throw new Error(
-          `Server returned ${response.status} ${response.statusText}`
-        );
+      console.log("Response status:", response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("API error response:", errorData);
+        throw new Error(errorData.error || "Signup failed");
       }
 
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Signup failed");
-      }
+      console.log("Signup successful, user data:", {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        hasSuperkey: !!data.superkey
+      });
 
       localStorage.setItem(
         "currentUser",
@@ -108,8 +152,12 @@ export default function SignupPage() {
       );
       router.push("/");
     } catch (err: any) {
-      console.error("Signup error:", err);
-      setError(err.message || "An unexpected error occurred");
+      console.error("Signup error details:", {
+        message: err.message,
+        stack: err.stack,
+        name: err.name
+      });
+      setError(err.message || "An unexpected error occurred during signup");
     } finally {
       setLoading(false);
     }
