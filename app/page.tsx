@@ -40,7 +40,6 @@ export default function Home() {
       if (!currentUser?.token) return
 
       try {
-        // Fetch latest profile data from API
         const response = await fetch("/api/profile", {
           headers: {
             Authorization: `Bearer ${currentUser.token}`,
@@ -50,7 +49,6 @@ export default function Home() {
 
         if (response.ok) {
           const userData = await response.json()
-          // Update user state with latest data including profile photo
           setUser({
             id: userData.id || currentUser.id,
             name: userData.name || currentUser.name,
@@ -58,12 +56,10 @@ export default function Home() {
             profilePhoto: userData.profilePhoto
           })
         } else {
-          // Fallback to localStorage data if API fails
           setUser(currentUser)
         }
       } catch (error) {
         console.error("Error fetching profile:", error)
-        // Fallback to localStorage data
         setUser(currentUser)
       }
     }
@@ -108,23 +104,9 @@ export default function Home() {
 
   const getProfilePhotoUrl = (profilePhoto?: string | null): string => {
     if (!profilePhoto) return "/placeholder.svg"
-    
-    // If it's already a complete URL (http/https), return as is
-    if (profilePhoto.startsWith('http')) {
-      return profilePhoto
-    }
-    
-    // If it's a data URL (base64), return as is
-    if (profilePhoto.startsWith('data:')) {
-      return profilePhoto
-    }
-    
-    // If it already starts with /Uploads/, return as is
-    if (profilePhoto.startsWith('/Uploads/')) {
-      return profilePhoto
-    }
-    
-    // Otherwise, prepend /Uploads/
+    if (profilePhoto.startsWith('http')) return profilePhoto
+    if (profilePhoto.startsWith('data:')) return profilePhoto
+    if (profilePhoto.startsWith('/Uploads/')) return profilePhoto
     return `/Uploads/${profilePhoto.replace(/^\/+/, '')}`
   }
 
@@ -151,6 +133,13 @@ export default function Home() {
     if (hasUnreadNotifications) {
       setHasUnreadNotifications(false)
       localStorage.setItem("notificationsLastRead", new Date().toISOString())
+    }
+  }
+
+  const handleViewReceiptsClick = (e: React.MouseEvent) => {
+    if (!user) {
+      e.preventDefault()
+      router.push("/login")
     }
   }
 
@@ -287,7 +276,7 @@ export default function Home() {
           <p className="text-xl text-gray-600">
             Create professional receipts and maintain accounts for your business in seconds
           </p>
-          <div className="flex justify-center space-x-4">
+          <div className="flex justify-center space-x-4 flex-wrap gap-4">
             <Link href="/create">
               <Button size="lg" className="font-medium">
                 Create Receipt <ArrowRight className="ml-2 h-4 w-4" />
@@ -298,9 +287,30 @@ export default function Home() {
                 Accounts <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
+            <Link 
+              href={user ? "/viewreceipts" : "#"} 
+              onClick={handleViewReceiptsClick}
+              className={!user ? "cursor-not-allowed" : ""}
+            >
+              <Button
+                size="lg"
+                className={`font-medium bg-green-600 hover:bg-green-700 ${
+                  !user ? "opacity-70" : ""
+                }`}
+                disabled={!user}
+              >
+                View Receipts <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
           </div>
+          {!user && (
+            <p className="text-sm text-gray-500">
+              Please login to access all features including View Receipts
+            </p>
+          )}
         </div>
       </div>
+
       {user?.profilePhoto && (
         <ImageViewer
           src={getProfilePhotoUrl(user.profilePhoto)}

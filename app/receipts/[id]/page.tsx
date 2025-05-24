@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ArrowLeft, Download, Printer } from "lucide-react";
@@ -40,8 +40,11 @@ interface ReceiptData {
 
 export default function ReceiptPreview() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const fromView = searchParams.get('from') === 'view';
 
   useEffect(() => {
     const fetchReceipt = async () => {
@@ -116,13 +119,11 @@ export default function ReceiptPreview() {
     return isNaN(num) ? 0 : num;
   };
 
-  // Fixed formatDate function to handle both date and time
   const formatDate = (dateString: string) => {
     if (!dateString) return "N/A";
     
     try {
       const date = new Date(dateString);
-      // Check if date is valid
       if (isNaN(date.getTime())) {
         return "Invalid Date";
       }
@@ -132,17 +133,15 @@ export default function ReceiptPreview() {
     }
   };
 
-  // New function to format date and time for createdAt
   const formatDateTime = (dateString: string) => {
     if (!dateString) return "N/A";
     
     try {
       const date = new Date(dateString);
-      // Check if date is valid
       if (isNaN(date.getTime())) {
         return "Invalid Date";
       }
-      return date.toLocaleString(); // This will show both date and time
+      return date.toLocaleString();
     } catch (error) {
       return "Invalid Date";
     }
@@ -155,7 +154,6 @@ export default function ReceiptPreview() {
     }, 0);
   };
 
-  // Calculate total advance amount from all items
   const calculateTotalAdvanceAmount = () => {
     if (!receiptData) return 0;
     return receiptData.items.reduce((total, item) => {
@@ -185,14 +183,25 @@ export default function ReceiptPreview() {
   return (
     <div className="container mx-auto py-8 px-4 max-w-4xl">
       <div className="flex justify-between items-center mb-6">
-        <Link href="/create">
-          <Button
-            variant="outline"
-            className="text-blue-600 border-blue-200 hover:bg-blue-50"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Form
-          </Button>
-        </Link>
+        {fromView ? (
+          <Link href="/viewreceipts">
+            <Button
+              variant="outline"
+              className="text-blue-600 border-blue-200 hover:bg-blue-50"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back to View
+            </Button>
+          </Link>
+        ) : (
+          <Link href="/create">
+            <Button
+              variant="outline"
+              className="text-blue-600 border-blue-200 hover:bg-blue-50"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Form
+            </Button>
+          </Link>
+        )}
         <div className="space-x-2">
           <Button variant="outline" onClick={handlePrint}>
             <Printer className="mr-2 h-4 w-4" /> Print

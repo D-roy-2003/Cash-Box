@@ -54,19 +54,21 @@ function formatDateForMySQL(date: Date | string): string {
     String(d.getSeconds()).padStart(2, '0');
 }
 
-// Updated function to return local system time instead of UTC
-function formatDateForResponse(date: Date | string): string {
-  const d = new Date(date);
-  if (isNaN(d.getTime())) throw new Error("Invalid date format");
-  
-  // Return local time in ISO format instead of UTC
-  const offset = d.getTimezoneOffset() * 60000; // offset in milliseconds
-  const localTime = new Date(d.getTime() - offset);
-  return localTime.toISOString().slice(0, -1); // Remove 'Z' to indicate local time
+// Function to get current local system time in MySQL format
+function getCurrentLocalTime(): string {
+  const now = new Date();
+  return now.getFullYear() + '-' +
+    String(now.getMonth() + 1).padStart(2, '0') + '-' +
+    String(now.getDate()).padStart(2, '0') + ' ' +
+    String(now.getHours()).padStart(2, '0') + ':' +
+    String(now.getMinutes()).padStart(2, '0') + ':' +
+    String(now.getSeconds()).padStart(2, '0');
 }
 
-// Alternative function that returns a more readable local format
-function formatDateForResponseLocal(date: Date | string): string {
+// Function to format database datetime to local time string
+function formatDatabaseDateToLocal(date: Date | string): string {
+  if (!date) return '';
+  
   const d = new Date(date);
   if (isNaN(d.getTime())) throw new Error("Invalid date format");
   
@@ -155,10 +157,9 @@ export async function GET(
       receiptId: receipt.id,
       receiptNumber: receipt.receipt_number,
       date: receipt.date,
-      // Using the updated function to return local system time
-      createdAt: formatDateForResponseLocal(receipt.created_at),
+      createdAt: formatDatabaseDateToLocal(receipt.created_at),
       updatedAt: receipt.updated_at
-        ? formatDateForResponseLocal(receipt.updated_at)
+        ? formatDatabaseDateToLocal(receipt.updated_at)
         : undefined,
       customerName: receipt.customer_name,
       customerContact: receipt.customer_contact,
@@ -206,11 +207,10 @@ export async function POST(request: Request) {
     connection = await pool.getConnection();
 
     // Get current local system time
-    const now = new Date();
-    const formattedNow = formatDateForMySQL(now);
+    const now = getCurrentLocalTime();
     const formattedDate = body.date
       ? formatDateForMySQL(body.date)
-      : formattedNow;
+      : now;
 
     const [result] = await connection.query<mysql.ResultSetHeader>(
       `INSERT INTO receipts (
@@ -230,8 +230,8 @@ export async function POST(request: Request) {
         body.total,
         body.dueTotal,
         body.userId,
-        formattedNow,
-        formattedNow,
+        now,
+        now,
       ]
     );
 
