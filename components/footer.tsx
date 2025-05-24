@@ -1,5 +1,5 @@
-import Link from "next/link"
-import { Facebook, Instagram, Linkedin, X } from "lucide-react"
+import Link from "next/link";
+import { Facebook, Instagram, Linkedin, X } from "lucide-react";
 
 export function Footer() {
   return (
@@ -25,7 +25,11 @@ export function Footer() {
                 <Instagram className="h-5 w-5" />
                 <span className="sr-only">Instagram</span>
               </Link>
-              <Link href="https://x.com/maity6449" target="_blank" className="text-gray-300 hover:text-white">
+              <Link
+                href="https://x.com/maity6449"
+                target="_blank"
+                className="text-gray-300 hover:text-white"
+              >
                 <X className="h-5 w-5" />
                 <span className="sr-only">X</span>
               </Link>
@@ -43,32 +47,44 @@ export function Footer() {
           <div className="text-center">
             <h3 className="text-sm font-medium mb-2">Developer Team</h3>
             <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-gray-300">
-              <Link 
-                href="https://www.linkedin.com/in/subhobrata-maity-260b16259/" 
+              <Link
+                href="https://www.linkedin.com/in/subhobrata-maity-260b16259/"
                 target="_blank"
                 className="text-gray-300 hover:text-white hover:underline"
               >
                 Subhobrata Maity
               </Link>
               <span>•</span>
-              <span>Gourav Majumder</span>
-              <span>•</span>
-              <span>Prem Ghosh</span>
-              <span>•</span>
-              <Link 
-                href="https://www.linkedin.com/in/prasenjit-datta/" 
+              <Link
+                href="https://www.linkedin.com/in/prasenjit-datta/"
                 target="_blank"
                 className="text-gray-300 hover:text-white hover:underline"
               >
                 Prasenjit Datta
               </Link>
               <span>•</span>
-              <Link 
-                href="https://www.linkedin.com/in/debangshu-roy-5531b8272/" 
+              <Link
+                href="https://www.linkedin.com/in/debangshu-roy-5531b8272/"
                 target="_blank"
                 className="text-gray-300 hover:text-white hover:underline"
               >
                 Debangshu Roy
+              </Link>
+              <span>•</span>
+              <Link
+                href="https://www.linkedin.com/in/gaurav-majumder-2484a1356/"
+                target="_blank"
+                className="text-gray-300 hover:text-white hover:underline"
+              >
+                Gourav Majumder
+              </Link>
+              <span>•</span>
+              <Link
+                href="https://www.linkedin.com/in/prem-ghosh-181414255"
+                target="_blank"
+                className="text-gray-300 hover:text-white hover:underline"
+              >
+                Prem Ghosh
               </Link>
             </div>
           </div>
@@ -79,5 +95,5 @@ export function Footer() {
         </div>
       </div>
     </footer>
-  )
+  );
 }

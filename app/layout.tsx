@@ -7,7 +7,7 @@ import { initializeDatabase } from "@/lib/database";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Receipt Generator",
+  title: "Cash-Box",
   description: "Create professional receipts for your business",
   generator: "v0.dev",
 };
