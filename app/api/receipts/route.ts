@@ -37,12 +37,16 @@ interface JwtPayload {
   [key: string]: any;
 }
 
-function formatDateForMySQL(date: Date | string): string {
+function formatLocalDateForMySQL(date: Date | string): string {
   const d = new Date(date);
   if (isNaN(d.getTime())) {
     throw new Error("Invalid date format");
   }
-  return d.toISOString().slice(0, 19).replace('T', ' ');
+  
+  // Format as YYYY-MM-DD HH:MM:SS in local time
+  const pad = (num: number) => num.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+         `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 function validateReceiptBody(body: ReceiptBody): string | null {
@@ -95,8 +99,8 @@ async function createReceipt(
 ): Promise<number> {
   const normalizedStatus = body.paymentStatus.toLowerCase();
   const normalizedType = body.paymentType.toLowerCase();
-  const createdAt = formatDateForMySQL(new Date());
-  const formattedDate = formatDateForMySQL(body.date);
+  const createdAt = formatLocalDateForMySQL(new Date());
+  const formattedDate = formatLocalDateForMySQL(body.date);
 
   const [result] = await connection.query<mysql.ResultSetHeader>(
     `INSERT INTO receipts (
@@ -201,7 +205,7 @@ async function processAccountTransaction(
   body: ReceiptBody,
   userId: string
 ): Promise<void> {
-  const createdAt = formatDateForMySQL(new Date());
+  const createdAt = formatLocalDateForMySQL(new Date());
   
   let transactionAmount = 0;
   let particulars = '';
