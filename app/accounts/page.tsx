@@ -1,11 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { ArrowLeft, FileText, Download, RefreshCw } from "lucide-react";
+import { ArrowLeft, FileText, Download, RefreshCw, Bell, Facebook, Instagram, Linkedin, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ImageViewer } from "@/components/image-viewer";
 
 interface Transaction {
   id: string;
@@ -31,6 +39,13 @@ interface DueRecord {
   receiptNumber?: string;
 }
 
+interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  profilePhoto?: string | null;
+}
+
 export default function AccountsPage() {
   const router = useRouter();
   const [particulars, setParticulars] = useState("");
@@ -38,8 +53,13 @@ export default function AccountsPage() {
   const [balance, setBalance] = useState(0);
   const [totalDueBalance, setTotalDueBalance] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationRef = useRef<HTMLDivElement | null>(null);
 
   const fetchDueRecords = async (userToken: string) => {
     try {
@@ -105,6 +125,7 @@ export default function AccountsPage() {
       setTransactions(data.transactions);
       setBalance(data.balance);
       setTotalDueBalance(currentTotalDue);
+      setUser(profile);
 
       // Save to localStorage for persistence
       localStorage.setItem(
@@ -113,7 +134,6 @@ export default function AccountsPage() {
       );
       localStorage.setItem("accountBalance", data.balance.toString());
       localStorage.setItem("totalDueBalance", currentTotalDue.toString());
-      setUser(profile);
     } catch (error) {
       console.error("Failed to fetch data:", error);
     } finally {
@@ -125,6 +145,41 @@ export default function AccountsPage() {
     fetchData();
   }, [router]);
 
+  useEffect(() => {
+    if (user) {
+      const overduePayments = checkOverduePayments();
+      setNotifications(overduePayments);
+
+      const lastReadTime = localStorage.getItem("notificationsLastRead");
+      if (lastReadTime) {
+        const lastRead = new Date(lastReadTime);
+        const hasNew = overduePayments.some((notification: any) => {
+          const createdAt = new Date(notification.createdAt);
+          return createdAt > lastRead;
+        });
+        setHasUnreadNotifications(hasNew || overduePayments.length > 0);
+      } else if (overduePayments.length > 0) {
+        setHasUnreadNotifications(true);
+      }
+    }
+  }, [user]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setIsNotificationsOpen(false);
+      }
+    }
+
+    if (isNotificationsOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isNotificationsOpen]);
+
   const saveData = (newTransactions: Transaction[], newBalance: number) => {
     localStorage.setItem(
       "accountTransactions",
@@ -135,7 +190,7 @@ export default function AccountsPage() {
     setBalance(newBalance);
   };
 
-  const handleDebit = async () => {
+  const handleTransaction = async (type: "credit" | "debit") => {
     if (
       !particulars ||
       !amount ||
@@ -165,7 +220,7 @@ export default function AccountsPage() {
         body: JSON.stringify({
           particulars,
           amount: amountValue,
-          type: "debit",
+          type,
         }),
       });
 
@@ -177,14 +232,16 @@ export default function AccountsPage() {
       const newTransaction = data.transaction;
 
       const newTransactions = [...transactions, newTransaction];
-      const newBalance = balance - amountValue;
+      const newBalance = type === "credit" 
+        ? balance + amountValue 
+        : balance - amountValue;
       
       saveData(newTransactions, newBalance);
       setParticulars("");
       setAmount("");
     } catch (error) {
-      console.error("Failed to create debit transaction:", error);
-      alert("Failed to create debit transaction");
+      console.error(`Failed to create ${type} transaction:`, error);
+      alert(`Failed to create ${type} transaction`);
     }
   };
 
@@ -265,228 +322,479 @@ export default function AccountsPage() {
     document.body.removeChild(link);
   };
 
+  const getProfilePhotoUrl = (profilePhoto?: string | null): string => {
+    if (!profilePhoto) return "/placeholder.svg";
+    if (profilePhoto.startsWith('http')) return profilePhoto;
+    if (profilePhoto.startsWith('data:')) return profilePhoto;
+    if (profilePhoto.startsWith('/Uploads/')) return profilePhoto;
+    return `/Uploads/${profilePhoto.replace(/^\/+/, '')}`;
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("currentUser");
+    router.push("/login");
+  };
+
+  const checkOverduePayments = () => {
+    const dueRecordsJSON = localStorage.getItem("dueRecords");
+    if (!dueRecordsJSON) return [];
+
+    const dueRecords = JSON.parse(dueRecordsJSON);
+    const today = new Date();
+
+    return dueRecords.filter((record: any) => {
+      const dueDate = new Date(record.expectedPaymentDate);
+      return !record.isPaid && dueDate < today;
+    });
+  };
+
+  const handleNotificationClick = () => {
+    setIsNotificationsOpen(!isNotificationsOpen);
+    if (hasUnreadNotifications) {
+      setHasUnreadNotifications(false);
+      localStorage.setItem("notificationsLastRead", new Date().toISOString());
+    }
+  };
+
   // Sort transactions by date (newest first)
   const sortedTransactions = [...transactions].sort((a, b) => {
     return new Date(b.date).getTime() - new Date(a.date).getTime();
   });
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="flex justify-between items-center mb-6">
-        <Link href="/">
-          <Button
-            variant="outline"
-            className="text-blue-600 border-blue-200 hover:bg-blue-50"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Home
-          </Button>
-        </Link>
-        <div className="flex gap-2">
-          <Button
-            onClick={handleRefresh}
-            variant="outline"
-            className="text-gray-600 border-gray-200 hover:bg-gray-50"
-            disabled={isRefreshing}
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} /> 
-            {isRefreshing ? 'Refreshing...' : 'Refresh'}
-          </Button>
-          <Link href="/accounts/due">
-            <Button
-              variant="outline"
-              className="bg-red-50 text-red-600 hover:bg-red-100 border-red-200"
-            >
-              <FileText className="mr-2 h-4 w-4" /> Manage Due Payments
-            </Button>
-          </Link>
-        </div>
-      </div>
-
-      <Card className="max-w-4xl mx-auto">
-        <CardHeader>
-          <CardTitle className="text-2xl">Accounts</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div className="p-4 bg-muted rounded-lg text-center">
-              <h2 className="text-lg font-medium mb-2">Current Balance</h2>
-              <p
-                className={`text-3xl font-bold ${
-                  balance >= 0 ? "text-green-600" : "text-red-600"
-                }`}
+    <div className="flex flex-col min-h-screen bg-gray-50">
+      {/* Header with lighter gray background (#2a2a2a) */}
+      <header className="w-full py-4 px-6 flex justify-between items-center border-b bg-[#2a2a2a] text-white">
+        <h1 className="text-xl font-bold">Cash-Box</h1>
+        <div className="flex items-center space-x-4">
+          {user && (
+            <div className="relative" ref={notificationRef}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative text-white hover:bg-[#3a3a3a]"
+                onClick={handleNotificationClick}
               >
-                ₹{balance.toFixed(2)}
-              </p>
-            </div>
+                <Bell className="h-5 w-5" />
+                {hasUnreadNotifications && (
+                  <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500"></span>
+                )}
+              </Button>
 
-            <div className="p-4 bg-red-50 rounded-lg text-center">
-              <h2 className="text-lg font-medium mb-2">Total Due Balance</h2>
-              <p className="text-3xl font-bold text-red-600">
-                -₹{totalDueBalance.toFixed(2)}
-              </p>
-              <p className="text-sm text-gray-500 mt-1">
-                <Link
-                  href="/accounts/due"
-                  className="underline hover:text-gray-700"
-                >
-                  Manage due payments
-                </Link>
-              </p>
-              {totalDueBalance > 0 && (
-                <p className="text-xs text-gray-400 mt-1">
-                  Synced with due records
-                </p>
+              {isNotificationsOpen && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg overflow-hidden z-20">
+                  <div className="py-2 px-3 bg-gray-100 border-b">
+                    <h3 className="text-sm font-medium text-gray-800">Notifications</h3>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    {notifications.length > 0 ? (
+                      notifications.map((notification: any) => (
+                        <Link
+                          href="/accounts/due"
+                          key={notification.id}
+                          className="block px-4 py-3 border-b hover:bg-gray-50"
+                        >
+                          <div className="flex items-start">
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-900">
+                                Payment Overdue: {notification.customerName}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                ₹{notification.amountDue.toFixed(2)} for {notification.productOrdered}
+                              </p>
+                              <p className="text-xs text-red-500">
+                                Due date: {new Date(notification.expectedPaymentDate).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                        </Link>
+                      ))
+                    ) : (
+                      <div className="px-4 py-6 text-center text-sm text-gray-500">No overdue payments</div>
+                    )}
+                  </div>
+                  {notifications.length > 0 && (
+                    <div className="py-2 px-3 bg-gray-100 border-t text-center">
+                      <Link href="/accounts/due" className="text-xs font-medium text-blue-600 hover:text-blue-500">
+                        View all due payments
+                      </Link>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-          </div>
-
-          <div className="flex flex-col md:flex-row gap-4 mb-6">
-            <input
-              type="text"
-              value={particulars}
-              onChange={(e) => setParticulars(e.target.value)}
-              placeholder="Particulars"
-              className="flex-1 border px-4 py-2 rounded-md"
-            />
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="Amount"
-              className="flex-1 border px-4 py-2 rounded-md"
-            />
-            <Button
-              onClick={handleDebit}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Add Debit
-            </Button>
-          </div>
-
-          {transactions.length > 0 && (
-            <div className="mt-8">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium">Transaction History</h3>
-                <Button
-                  onClick={exportToExcel}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <Download className="mr-2 h-4 w-4" /> Export to Excel
+          )}
+          {user ? (
+            <div className="flex items-center space-x-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="relative h-10 w-10 rounded-full text-white hover:bg-[#3a3a3a] bg-gray-100 p-0 overflow-hidden"
+                  >
+                    {user.profilePhoto ? (
+                      <img
+                        src={getProfilePhotoUrl(user.profilePhoto)}
+                        alt={user.name}
+                        className="h-10 w-10 rounded-full object-cover cursor-pointer"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIsImageViewerOpen(true);
+                        }}
+                      />
+                    ) : (
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-200">
+                        <span className="text-sm font-medium text-gray-600">
+                          {user.name.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <div className="flex flex-col space-y-1 p-2">
+                    <p className="text-sm font-medium">{user.name}</p>
+                    <p className="text-xs text-muted-foreground">{user.email}</p>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href="/profile">Profile</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/accounts">Accounts</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout}>Logout</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ) : (
+            <div className="space-x-2">
+              <Link href="/login">
+                <Button variant="outline" size="sm" className="bg-white text-black hover:bg-gray-100">
+                  Login
                 </Button>
-              </div>
-              <div className="border rounded-lg overflow-hidden hidden md:block">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Date
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Particulars
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Type
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Receipt
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Amount
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {sortedTransactions.map((transaction) => (
-                        <tr key={transaction.id}>
-                          <td className="px-6 py-4 text-sm text-gray-500">
-                            {formatDate(transaction.date)}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {transaction.particulars}
-                          </td>
-                          <td className="px-6 py-4 text-sm">
-                            <span
-                              className={`px-2 inline-flex text-xs font-semibold rounded-full ${
-                                transaction.type === "credit"
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-red-100 text-red-800"
-                              }`}
-                            >
-                              {transaction.type.charAt(0).toUpperCase() +
-                                transaction.type.slice(1)}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-500">
-                            {transaction.receiptNumber || "-"}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-right font-medium">
-                            <span
-                              className={
-                                transaction.type === "credit"
-                                  ? "text-green-600"
-                                  : "text-red-600"
-                              }
-                            >
-                              ₹{transaction.amount.toFixed(2)}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              </Link>
+              <Link href="/signup">
+                <Button size="sm" className="bg-blue-600 text-white hover:bg-blue-700">
+                  Sign Up
+                </Button>
+              </Link>
+            </div>
+          )}
+        </div>
+      </header>
+
+      <div className="flex-1">
+        <div className="container mx-auto py-8 px-4">
+          <div className="flex justify-between items-center mb-6">
+            <Link href="/">
+              <Button
+                variant="outline"
+                className="text-blue-600 border-blue-200 hover:bg-blue-50"
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Home
+              </Button>
+            </Link>
+          </div>
+
+          <Card className="max-w-4xl mx-auto">
+            <CardHeader>
+              <CardTitle className="text-2xl">Accounts</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="p-4 bg-muted rounded-lg text-center">
+                  <h2 className="text-lg font-medium mb-2">Current Balance</h2>
+                  <p
+                    className={`text-3xl font-bold ${
+                      balance >= 0 ? "text-green-600" : "text-red-600"
+                    }`}
+                  >
+                    ₹{balance.toFixed(2)}
+                  </p>
+                </div>
+
+                <div className="p-4 bg-red-50 rounded-lg text-center">
+                  <h2 className="text-lg font-medium mb-2">Total Due Balance</h2>
+                  <p className="text-3xl font-bold text-red-600">
+                    -₹{totalDueBalance.toFixed(2)}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    <Link
+                      href="/accounts/due"
+                      className="underline hover:text-gray-700"
+                    >
+                      Manage due payments
+                    </Link>
+                  </p>
+                  {totalDueBalance > 0 && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Synced with due records
+                    </p>
+                  )}
                 </div>
               </div>
 
-              <div className="md:hidden mt-4 space-y-4">
-                {sortedTransactions.map((transaction) => (
-                  <div
-                    key={transaction.id}
-                    className={`p-4 rounded-lg border ${
-                      transaction.type === "credit"
-                        ? "bg-green-50 border-green-200"
-                        : "bg-red-50 border-red-200"
-                    }`}
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="text-sm font-medium">
-                        {transaction.particulars}
-                      </span>
-                      <span
-                        className={`font-bold ${
-                          transaction.type === "credit"
-                            ? "text-green-600"
-                            : "text-red-600"
-                        }`}
-                      >
-                        ₹{transaction.amount.toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-xs text-gray-500">
-                      <span>{formatDate(transaction.date)}</span>
-                      <span
-                        className={`px-2 py-1 rounded-full ${
-                          transaction.type === "credit"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-red-100 text-red-800"
-                        }`}
-                      >
-                        {transaction.type.charAt(0).toUpperCase() +
-                          transaction.type.slice(1)}
-                      </span>
-                    </div>
-                    {transaction.receiptNumber && (
-                      <div className="mt-2 text-xs text-gray-500">
-                        Receipt: {transaction.receiptNumber}
-                      </div>
-                    )}
+              <div className="flex flex-col md:flex-row gap-4 mb-6">
+                <input
+                  type="text"
+                  value={particulars}
+                  onChange={(e) => setParticulars(e.target.value)}
+                  placeholder="Particulars"
+                  className="flex-1 border px-4 py-2 rounded-md"
+                />
+                <input
+                  type="number"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="Amount"
+                  className="flex-1 border px-4 py-2 rounded-md"
+                />
+                <Button
+                  onClick={() => handleTransaction("credit")}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  Add Credit
+                </Button>
+                <Button
+                  onClick={() => handleTransaction("debit")}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  Add Debit
+                </Button>
+              </div>
+
+              {transactions.length > 0 && (
+                <div className="mt-8">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-medium">Transaction History</h3>
+                    <Button
+                      onClick={exportToExcel}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      <Download className="mr-2 h-4 w-4" /> Export to Excel
+                    </Button>
                   </div>
-                ))}
+                  <div className="border rounded-lg overflow-hidden hidden md:block">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Date
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Particulars
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Type
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Receipt
+                            </th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Amount
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {sortedTransactions.map((transaction) => (
+                            <tr key={transaction.id}>
+                              <td className="px-6 py-4 text-sm text-gray-500">
+                                {formatDate(transaction.date)}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-900">
+                                {transaction.particulars}
+                              </td>
+                              <td className="px-6 py-4 text-sm">
+                                <span
+                                  className={`px-2 inline-flex text-xs font-semibold rounded-full ${
+                                    transaction.type === "credit"
+                                      ? "bg-green-100 text-green-800"
+                                      : "bg-red-100 text-red-800"
+                                  }`}
+                                >
+                                  {transaction.type.charAt(0).toUpperCase() +
+                                    transaction.type.slice(1)}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-500">
+                                {transaction.receiptNumber || "-"}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-right font-medium">
+                                <span
+                                  className={
+                                    transaction.type === "credit"
+                                      ? "text-green-600"
+                                      : "text-red-600"
+                                  }
+                                >
+                                  ₹{transaction.amount.toFixed(2)}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="md:hidden mt-4 space-y-4">
+                    {sortedTransactions.map((transaction) => (
+                      <div
+                        key={transaction.id}
+                        className={`p-4 rounded-lg border ${
+                          transaction.type === "credit"
+                            ? "bg-green-50 border-green-200"
+                            : "bg-red-50 border-red-200"
+                        }`}
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="text-sm font-medium">
+                            {transaction.particulars}
+                          </span>
+                          <span
+                            className={`font-bold ${
+                              transaction.type === "credit"
+                                ? "text-green-600"
+                                : "text-red-600"
+                            }`}
+                          >
+                            ₹{transaction.amount.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs text-gray-500">
+                          <span>{formatDate(transaction.date)}</span>
+                          <span
+                            className={`px-2 py-1 rounded-full ${
+                              transaction.type === "credit"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {transaction.type.charAt(0).toUpperCase() +
+                              transaction.type.slice(1)}
+                          </span>
+                        </div>
+                        {transaction.receiptNumber && (
+                          <div className="mt-2 text-xs text-gray-500">
+                            Receipt: {transaction.receiptNumber}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Footer Section */}
+      <footer className="w-full py-4 px-4 bg-gray-800 text-white">
+        <div className="container mx-auto">
+          <div className="flex flex-col items-center justify-center space-y-3">
+            <div className="text-center">
+              <h3 className="text-sm font-medium mb-2">Follow Us</h3>
+              <div className="flex space-x-4">
+                <Link
+                  href="https://www.facebook.com/subhobrata.maity.96/"
+                  target="_blank"
+                  className="text-gray-300 hover:text-white"
+                >
+                  <Facebook className="h-5 w-5" />
+                  <span className="sr-only">Facebook</span>
+                </Link>
+                <Link
+                  href="https://www.instagram.com/subhox_maity/"
+                  target="_blank"
+                  className="text-gray-300 hover:text-white"
+                >
+                  <Instagram className="h-5 w-5" />
+                  <span className="sr-only">Instagram</span>
+                </Link>
+                <Link
+                  href="https://x.com/maity6449"
+                  target="_blank"
+                  className="text-gray-300 hover:text-white"
+                >
+                  <X className="h-5 w-5" />
+                  <span className="sr-only">X</span>
+                </Link>
+                <Link
+                  href="https://www.linkedin.com/in/subhobrata-maity-260b16259/"
+                  target="_blank"
+                  className="text-gray-300 hover:text-white"
+                >
+                  <Linkedin className="h-5 w-5" />
+                  <span className="sr-only">LinkedIn</span>
+                </Link>
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+
+            <div className="text-center">
+              <h3 className="text-sm font-medium mb-2">Developer Team</h3>
+              <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-gray-300">
+                <Link
+                  href="https://www.linkedin.com/in/subhobrata-maity-260b16259/"
+                  target="_blank"
+                  className="text-gray-300 hover:text-white hover:underline"
+                >
+                  Subhobrata Maity
+                </Link>
+                <span>•</span>
+                <Link
+                  href="https://www.linkedin.com/in/prasenjit-datta/"
+                  target="_blank"
+                  className="text-gray-300 hover:text-white hover:underline"
+                >
+                  Prasenjit Datta
+                </Link>
+                <span>•</span>
+                <Link
+                  href="https://www.linkedin.com/in/debangshu-roy-5531b8272/"
+                  target="_blank"
+                  className="text-gray-300 hover:text-white hover:underline"
+                >
+                  Debangshu Roy
+                </Link>
+                <span>•</span>
+                <Link
+                  href="https://www.linkedin.com/in/gaurav-majumder-2484a1356/"
+                  target="_blank"
+                  className="text-gray-300 hover:text-white hover:underline"
+                >
+                  Gourav Majumder
+                </Link>
+                <span>•</span>
+                <Link
+                  href="https://www.linkedin.com/in/prem-ghosh-181414255"
+                  target="_blank"
+                  className="text-gray-300 hover:text-white hover:underline"
+                >
+                  Prem Ghosh
+                </Link>
+              </div>
+            </div>
+
+            <div className="text-xs text-gray-400 mt-2">
+              &copy; {new Date().getFullYear()} Cash-Box. All Rights Reserved.
+            </div>
+          </div>
+        </div>
+      </footer>
+
+      {user?.profilePhoto && (
+        <ImageViewer
+          src={getProfilePhotoUrl(user.profilePhoto)}
+          alt={user.name}
+          isOpen={isImageViewerOpen}
+          onClose={() => setIsImageViewerOpen(false)}
+        />
+      )}
     </div>
   );
 }

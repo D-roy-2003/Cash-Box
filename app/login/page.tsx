@@ -24,11 +24,11 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Redirect to home if already logged in
+  // Redirect to accounts page if already logged in
   useEffect(() => {
     const user = localStorage.getItem("currentUser");
     if (user) {
-      router.push("/");
+      router.push("/accounts");
     }
   }, [router]);
 
@@ -66,7 +66,8 @@ export default function LoginPage() {
         })
       );
 
-      router.push("/");
+      // Redirect to accounts page after successful login
+      router.push("/accounts");
     } catch (err: any) {
       setError(err.message || "An unexpected error occurred");
     } finally {
