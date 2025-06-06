@@ -27,9 +27,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 interface UserProfile {
-  id: string;
-  superkey: string;  
+  id: string | number;
+  superkey: string;
   name: string;
+  email: string;
   createdAt: string;
   storeName: string;
   storeAddress: string;
@@ -43,9 +44,6 @@ export default function ProfilePage() {
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [name, setName] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [storeName, setStoreName] = useState("");
   const [storeAddress, setStoreAddress] = useState("");
   const [storeContact, setStoreContact] = useState("");
@@ -72,6 +70,7 @@ export default function ProfilePage() {
         profileData.storeName &&
         profileData.storeAddress &&
         profileData.storeContact &&
+        profileData.storeCountryCode &&
         /^\d{10}$/.test(profileData.storeContact)
       );
     },
@@ -92,16 +91,15 @@ export default function ProfilePage() {
     [checkProfileCompletion]
   );
 
-  // Helper function to format date safely
   const formatDate = (dateString: string): string => {
     try {
       if (!dateString) return "N/A";
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return "N/A";
-      return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
+      return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
       });
     } catch (error) {
       console.error("Date formatting error:", error);
@@ -109,44 +107,55 @@ export default function ProfilePage() {
     }
   };
 
+  const fetchProfile = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setFetchError(null);
+
+      const userJSON = localStorage.getItem("currentUser");
+      if (!userJSON) {
+        router.push("/login");
+        return;
+      }
+
+      const currentUser = JSON.parse(userJSON);
+      if (!currentUser?.token) {
+        router.push("/login");
+        return;
+      }
+
+      const response = await fetch("/api/profile", {
+        headers: {
+          Authorization: `Bearer ${currentUser.token}`,
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem("currentUser");
+          router.push("/login");
+          return;
+        }
+        throw new Error(`Failed to fetch profile: ${response.status}`);
+      }
+
+      const userData = await response.json();
+      return userData;
+    } catch (error: any) {
+      console.error("Profile fetch error:", error);
+      setFetchError(error.message || "Failed to load profile data");
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [router]);
+
   useEffect(() => {
     let isMounted = true;
 
-    const fetchProfile = async () => {
+    const loadProfile = async () => {
       try {
-        setIsLoading(true);
-        setFetchError(null);
-
-        const userJSON = localStorage.getItem("currentUser");
-        if (!userJSON) {
-          router.push("/login");
-          return;
-        }
-
-        const currentUser = JSON.parse(userJSON);
-        if (!currentUser?.token) {
-          router.push("/login");
-          return;
-        }
-
-        const response = await fetch("/api/profile", {
-          headers: {
-            Authorization: `Bearer ${currentUser.token}`,
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            localStorage.removeItem("currentUser");
-            router.push("/login");
-            return;
-          }
-          throw new Error(`Failed to fetch profile: ${response.status}`);
-        }
-
-        const userData = await response.json();
-
+        const userData = await fetchProfile();
         if (isMounted) {
           setUserState(userData);
           const from = new URLSearchParams(window.location.search).get("from");
@@ -155,81 +164,17 @@ export default function ProfilePage() {
             setShowProfileAlert(!userData.isProfileComplete);
           }
         }
-      } catch (error: any) {
-        if (isMounted) {
-          setFetchError(error.message || "Failed to load profile data");
-          console.error("Profile fetch error:", error);
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+      } catch (error) {
+        console.error("Error loading profile:", error);
       }
     };
 
-    fetchProfile();
+    loadProfile();
 
     return () => {
       isMounted = false;
     };
-  }, [router, setUserState]);
-
-  useEffect(() => {
-    if (user) {
-      const isComplete = checkProfileCompletion({
-        name,
-        storeName,
-        storeAddress,
-        storeContact,
-      });
-      if (isComplete !== user.isProfileComplete) {
-        updateProfileCompletionStatus(isComplete);
-      }
-      if (showProfileAlert && isComplete) {
-        setShowProfileAlert(false);
-      }
-    }
-  }, [
-    name,
-    storeName,
-    storeAddress,
-    storeContact,
-    user,
-    showProfileAlert,
-    checkProfileCompletion,
-  ]);
-
-  const updateProfileCompletionStatus = async (isComplete: boolean) => {
-    try {
-      const userJSON = localStorage.getItem("currentUser");
-      if (!userJSON) {
-        router.push("/login");
-        return;
-      }
-
-      const currentUser = JSON.parse(userJSON);
-
-      const response = await fetch("/api/profile/complete", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${currentUser.token}`,
-        },
-        body: JSON.stringify({ isProfileComplete: isComplete }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to update profile completion status");
-      }
-
-      const updatedProfile = await response.json();
-      setUser((prev) =>
-        prev ? { ...prev, isProfileComplete: isComplete } : null
-      );
-    } catch (error) {
-      console.error("Error updating profile completion:", error);
-    }
-  };
+  }, [fetchProfile, setUserState]);
 
   const validateContact = (contact: string): boolean => {
     if (!contact) {
@@ -248,6 +193,31 @@ export default function ProfilePage() {
     setStoreContact(value || "");
     setStoreCountryCode(countryCode || "+91");
     validateContact(value);
+  };
+
+  const uploadProfilePhoto = async (file: File, token: string): Promise<string | null> => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to upload profile photo");
+      }
+
+      const data = await response.json();
+      return data.filePath;
+    } catch (error) {
+      console.error("Upload error:", error);
+      throw error;
+    }
   };
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -284,45 +254,30 @@ export default function ProfilePage() {
 
       const currentUser = JSON.parse(userJSON);
 
-      let photoPath = profilePhoto || null;
-      if (selectedFile) {
-        const uploadFormData = new FormData();
-        uploadFormData.append("file", selectedFile);
-
-        const uploadResponse = await fetch("/api/upload", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${currentUser.token}`,
-          },
-          body: uploadFormData,
-        });
-
-        if (!uploadResponse.ok) {
-          throw new Error("Failed to upload profile picture");
-        }
-
-        const uploadData = await uploadResponse.json();
-        photoPath = uploadData.filePath;
-      } else if (profilePhoto === null) {
-        photoPath = null;
-      }
-
-      const isComplete = checkProfileCompletion({
-        name,
-        storeName,
-        storeAddress,
-        storeContact,
-      });
-
-      const profileData = {
+      // Prepare the update payload
+      const updatePayload: any = {
         name,
         storeName,
         storeAddress,
         storeContact,
         storeCountryCode,
-        profilePhoto: photoPath,
-        isProfileComplete: isComplete,
       };
+
+      // Handle profile photo upload if a new file was selected
+      if (selectedFile) {
+        try {
+          const photoUrl = await uploadProfilePhoto(selectedFile, currentUser.token);
+          updatePayload.profilePhoto = photoUrl;
+        } catch (uploadError) {
+          console.error("Profile photo upload failed:", uploadError);
+          setError("Failed to upload profile photo");
+          setLoading(false);
+          return;
+        }
+      } else if (profilePhoto === null) {
+        // Explicitly set to null if user removed the photo
+        updatePayload.profilePhoto = null;
+      }
 
       const response = await fetch("/api/profile", {
         method: "PUT",
@@ -330,7 +285,7 @@ export default function ProfilePage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${currentUser.token}`,
         },
-        body: JSON.stringify(profileData),
+        body: JSON.stringify(updatePayload),
       });
 
       if (!response.ok) {
@@ -338,11 +293,15 @@ export default function ProfilePage() {
         throw new Error(errorData.error || "Failed to update profile");
       }
 
-      const updatedProfile = await response.json();
+      const { updatedProfile } = await response.json();
+      
       setSuccess("Profile updated successfully");
-      setUserState(updatedProfile.updatedProfile);
+      setUserState(updatedProfile);
       setSelectedFile(null);
-      if (updatedProfile.isProfileComplete && redirectFrom) {
+      
+      // Update profile completion status
+      const isComplete = checkProfileCompletion(updatedProfile);
+      if (isComplete && redirectFrom) {
         router.push(redirectFrom);
       }
     } catch (error: any) {
@@ -353,56 +312,7 @@ export default function ProfilePage() {
     }
   };
 
-  const handleUpdatePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    setSuccess("");
-
-    if (!user) return;
-
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      setError("Please fill in all password fields");
-      setLoading(false);
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setError("New passwords do not match");
-      setLoading(false);
-      return;
-    }
-
-    if (newPassword.length <= 7) {
-      setError("Password must be at least 8 characters long");
-      setLoading(false);
-      return;
-    }
-
-    if (!/[A-Z]/.test(newPassword)) {
-      setError("Password must contain at least one uppercase letter");
-      setLoading(false);
-      return;
-    }
-
-    if (!/[a-z]/.test(newPassword)) {
-      setError("Password must contain at least one lowercase letter");
-      setLoading(false);
-      return;
-    }
-
-    if (!/[0-9]/.test(newPassword)) {
-      setError("Password must contain at least one digit");
-      setLoading(false);
-      return;
-    }
-
-    if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(newPassword)) {
-      setError("Password must contain at least one special character");
-      setLoading(false);
-      return;
-    }
-
+  const handleProfileCompletion = async (isComplete: boolean) => {
     try {
       const userJSON = localStorage.getItem("currentUser");
       if (!userJSON) {
@@ -411,37 +321,26 @@ export default function ProfilePage() {
       }
 
       const currentUser = JSON.parse(userJSON);
-      if (!currentUser?.token) {
-        router.push("/login");
-        return;
-      }
 
-      const response = await fetch("/api/profile/password", {
-        method: "PUT",
+      const response = await fetch("/api/profile", {
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${currentUser.token}`,
         },
-        body: JSON.stringify({
-          currentPassword,
-          newPassword,
-        }),
+        body: JSON.stringify({ isProfileComplete: isComplete }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to update password");
+        throw new Error("Failed to update profile completion status");
       }
 
-      setSuccess("Password updated successfully");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (error: any) {
-      console.error("Update password error:", error);
-      setError(error.message || "Failed to update password");
-    } finally {
-      setLoading(false);
+      const data = await response.json();
+      setUser((prev) => (prev ? { ...prev, isProfileComplete: isComplete } : null));
+      return data;
+    } catch (error) {
+      console.error("Error updating profile completion:", error);
+      throw error;
     }
   };
 
@@ -556,7 +455,7 @@ export default function ProfilePage() {
             <button className="flex items-center space-x-2 focus:outline-none">
               {profilePhoto ? (
                 <img
-                  src={profilePhoto.startsWith('/Uploads') ? profilePhoto : profilePhoto}
+                  src={profilePhoto}
                   alt="Profile"
                   className="h-10 w-10 rounded-full object-cover border-2 border-gray-200 cursor-pointer hover:border-blue-500 transition-colors"
                   onClick={openFullScreenPhoto}
@@ -604,7 +503,7 @@ export default function ProfilePage() {
                 {profilePhoto ? (
                   <div className="relative">
                     <img
-                      src={profilePhoto.startsWith('/Uploads') ? profilePhoto : profilePhoto}
+                      src={profilePhoto}
                       alt="Profile"
                       className="h-20 w-20 rounded-full object-cover border-2 border-gray-200 cursor-pointer"
                       onClick={(e) => {
@@ -643,9 +542,12 @@ export default function ProfilePage() {
               </div>
               <div>
                 <CardTitle className="text-2xl">{user.name}</CardTitle>
-                <p className="text-sm text-gray-500">
+                <CardDescription className="text-sm text-gray-500">
                   Member since {formatDate(user.createdAt)}
-                </p>
+                </CardDescription>
+                <CardDescription className="text-sm">
+                  {user.email}
+                </CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -654,7 +556,7 @@ export default function ProfilePage() {
         <Tabs defaultValue="profile">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="profile">Profile Information</TabsTrigger>
-            <TabsTrigger value="security">Security & Password</TabsTrigger>
+            <TabsTrigger value="security">Security</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile">
@@ -680,36 +582,35 @@ export default function ProfilePage() {
                 )}
 
                 <form onSubmit={handleUpdateProfile} className="space-y-4">
-                  <div className="space-y-2"></div>
-<div className="space-y-2">
-  <Label htmlFor="superkey">Super Key</Label>
-  <div className="relative">
-    <Input
-      id="superkey"
-      type="text"
-      value={user?.superkey || ''}
-      readOnly
-      className="bg-gray-100 cursor-not-allowed pr-10"
-    />
-    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        className="h-5 w-5 text-gray-400"
-        viewBox="0 0 20 20"
-        fill="currentColor"
-      >
-        <path
-          fillRule="evenodd"
-          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
-          clipRule="evenodd"
-        />
-      </svg>
-    </div>
-  </div>
-  <p className="text-sm text-gray-500">
-    This is your unique identifier and cannot be changed
-  </p>
-</div>
+                  <div className="space-y-2">
+                    <Label htmlFor="superkey">Super Key</Label>
+                    <div className="relative">
+                      <Input
+                        id="superkey"
+                        type="text"
+                        value={user?.superkey || ""}
+                        readOnly
+                        className="bg-gray-100 cursor-not-allowed pr-10"
+                      />
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-5 w-5 text-gray-400"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-500">
+                      This is your unique identifier and cannot be changed
+                    </p>
+                  </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="name">Full Name *</Label>
@@ -772,68 +673,48 @@ export default function ProfilePage() {
           <TabsContent value="security">
             <Card>
               <CardHeader>
-                <CardTitle>Change Password</CardTitle>
+                <CardTitle>Account Security</CardTitle>
                 <CardDescription>
-                  Update your password to keep your account secure
+                  Manage your account security settings
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                {error && (
-                  <Alert variant="destructive" className="mb-4">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
-                {success && (
-                  <Alert className="mb-4 bg-green-50 text-green-800 border-green-200">
-                    <AlertDescription>{success}</AlertDescription>
-                  </Alert>
-                )}
-
-                <form onSubmit={handleUpdatePassword} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="currentPassword">Current Password *</Label>
-                    <Input
-                      id="currentPassword"
-                      type="password"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      placeholder="Enter your current password"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="newPassword">New Password *</Label>
-                    <Input
-                      id="newPassword"
-                      type="password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Enter your new password"
-                      required
-                    />
-                    <p className="text-sm text-gray-600">
-                      Password must be at least 8 characters long and contain uppercase, lowercase, number, and special character.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirm New Password *</Label>
-                    <Input
-                      id="confirmPassword"
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Confirm your new password"
-                      required
-                    />
-                  </div>
-
-                  <Button type="submit" disabled={loading} className="w-full">
-                    {loading ? "Updating..." : "Update Password"}
+              <CardContent className="space-y-6">
+                <div>
+                  <h3 className="font-medium mb-2">Session Management</h3>
+                  <Button variant="outline" onClick={handleLogout}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Log out of all devices
                   </Button>
-                </form>
+                </div>
+
+                <div>
+                  <h3 className="font-medium mb-2">Profile Completion</h3>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm">
+                        {user.isProfileComplete
+                          ? "Your profile is complete"
+                          : "Your profile is incomplete"}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {user.isProfileComplete
+                          ? "You can access all features"
+                          : "Complete your profile to access all features"}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleProfileCompletion(!user.isProfileComplete)}
+                      disabled={loading}
+                    >
+                      {loading
+                        ? "Updating..."
+                        : user.isProfileComplete
+                        ? "Mark as Incomplete"
+                        : "Mark as Complete"}
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -844,7 +725,7 @@ export default function ProfilePage() {
       {profilePhoto && (
         <ImageViewer
           isOpen={isImageViewerOpen}
-          src={profilePhoto.startsWith('/Uploads') ? profilePhoto : profilePhoto}
+          src={profilePhoto}
           alt="Profile Photo"
           onClose={() => setIsImageViewerOpen(false)}
         />

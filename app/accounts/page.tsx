@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { ArrowLeft, FileText, Download, RefreshCw, Bell, Facebook, Instagram, Linkedin, X } from "lucide-react";
+import { ArrowLeft, FileText, Download, RefreshCw, Bell, Facebook, Instagram, Linkedin, X, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ImageViewer } from "@/components/image-viewer";
+import { Footer } from "@/components/footer";
 
 interface Transaction {
   id: string;
@@ -60,6 +61,77 @@ export default function AccountsPage() {
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      const userJSON = localStorage.getItem("currentUser")
+      if (!userJSON) return
+
+      const currentUser = JSON.parse(userJSON)
+      if (!currentUser?.token) return
+
+      try {
+        const response = await fetch("/api/profile", {
+          headers: {
+            Authorization: `Bearer ${currentUser.token}`,
+            "Content-Type": "application/json",
+          },
+        })
+
+        if (response.ok) {
+          const userData = await response.json()
+          setUser({
+            id: userData.id || currentUser.id,
+            name: userData.name || currentUser.name,
+            email: userData.email || currentUser.email,
+            profilePhoto: userData.profilePhoto
+          })
+        } else {
+          setUser(currentUser)
+        }
+      } catch (error) {
+        console.error("Error fetching profile:", error)
+        setUser(currentUser)
+      }
+    }
+
+    fetchUserProfile()
+  }, [])
+
+  useEffect(() => {
+    if (user) {
+      const overduePayments = checkOverduePayments();
+      setNotifications(overduePayments);
+
+      const lastReadTime = localStorage.getItem("notificationsLastRead");
+      if (lastReadTime) {
+        const lastRead = new Date(lastReadTime);
+        const hasNew = overduePayments.some((notification: any) => {
+          const createdAt = new Date(notification.createdAt);
+          return createdAt > lastRead;
+        });
+        setHasUnreadNotifications(hasNew || overduePayments.length > 0);
+      } else if (overduePayments.length > 0) {
+        setHasUnreadNotifications(true);
+      }
+    }
+  }, [user]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setIsNotificationsOpen(false);
+      }
+    }
+
+    if (isNotificationsOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isNotificationsOpen]);
 
   const fetchDueRecords = async (userToken: string) => {
     try {
@@ -144,41 +216,6 @@ export default function AccountsPage() {
   useEffect(() => {
     fetchData();
   }, [router]);
-
-  useEffect(() => {
-    if (user) {
-      const overduePayments = checkOverduePayments();
-      setNotifications(overduePayments);
-
-      const lastReadTime = localStorage.getItem("notificationsLastRead");
-      if (lastReadTime) {
-        const lastRead = new Date(lastReadTime);
-        const hasNew = overduePayments.some((notification: any) => {
-          const createdAt = new Date(notification.createdAt);
-          return createdAt > lastRead;
-        });
-        setHasUnreadNotifications(hasNew || overduePayments.length > 0);
-      } else if (overduePayments.length > 0) {
-        setHasUnreadNotifications(true);
-      }
-    }
-  }, [user]);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
-        setIsNotificationsOpen(false);
-      }
-    }
-
-    if (isNotificationsOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isNotificationsOpen]);
 
   const saveData = (newTransactions: Transaction[], newBalance: number) => {
     localStorage.setItem(
@@ -332,6 +369,7 @@ export default function AccountsPage() {
 
   const handleLogout = () => {
     localStorage.removeItem("currentUser");
+    setUser(null);
     router.push("/login");
   };
 
@@ -356,6 +394,13 @@ export default function AccountsPage() {
     }
   };
 
+  const handleViewReceiptsClick = (e: React.MouseEvent) => {
+    if (!user) {
+      e.preventDefault();
+      router.push("/login");
+    }
+  };
+
   // Sort transactions by date (newest first)
   const sortedTransactions = [...transactions].sort((a, b) => {
     return new Date(b.date).getTime() - new Date(a.date).getTime();
@@ -363,16 +408,15 @@ export default function AccountsPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
-      {/* Header with lighter gray background (#2a2a2a) */}
-      <header className="w-full py-4 px-6 flex justify-between items-center border-b bg-[#2a2a2a] text-white">
+      <header className="w-full py-4 px-6 flex justify-between items-center border-b bg-black text-white">
         <h1 className="text-xl font-bold">Cash-Box</h1>
         <div className="flex items-center space-x-4">
           {user && (
-            <div className="relative" ref={notificationRef}>
+            <div className="relative">
               <Button
                 variant="ghost"
                 size="icon"
-                className="relative text-white hover:bg-[#3a3a3a]"
+                className="relative text-white hover:bg-gray-800"
                 onClick={handleNotificationClick}
               >
                 <Bell className="h-5 w-5" />
@@ -382,7 +426,10 @@ export default function AccountsPage() {
               </Button>
 
               {isNotificationsOpen && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg overflow-hidden z-20">
+                <div
+                  ref={notificationRef}
+                  className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg overflow-hidden z-20"
+                >
                   <div className="py-2 px-3 bg-gray-100 border-b">
                     <h3 className="text-sm font-medium text-gray-800">Notifications</h3>
                   </div>
@@ -430,7 +477,7 @@ export default function AccountsPage() {
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
-                    className="relative h-10 w-10 rounded-full text-white hover:bg-[#3a3a3a] bg-gray-100 p-0 overflow-hidden"
+                    className="relative h-10 w-10 rounded-full text-white hover:bg-gray-800 bg-gray-100 p-0 overflow-hidden"
                   >
                     {user.profilePhoto ? (
                       <img
@@ -489,14 +536,27 @@ export default function AccountsPage() {
       <div className="flex-1">
         <div className="container mx-auto py-8 px-4">
           <div className="flex justify-between items-center mb-6">
-            <Link href="/">
-              <Button
-                variant="outline"
-                className="text-blue-600 border-blue-200 hover:bg-blue-50"
+            <div className="flex space-x-4">
+              <Link href="/create">
+                <Button className="font-medium">
+                  Create Receipt <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+              <Link 
+                href={user ? "/viewreceipts" : "#"} 
+                onClick={handleViewReceiptsClick}
+                className={!user ? "cursor-not-allowed" : ""}
               >
-                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Home
-              </Button>
-            </Link>
+                <Button
+                  className={`font-medium bg-green-600 hover:bg-green-700 ${
+                    !user ? "opacity-70" : ""
+                  }`}
+                  disabled={!user}
+                >
+                  View Receipts <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
           </div>
 
           <Card className="max-w-4xl mx-auto">
@@ -693,100 +753,6 @@ export default function AccountsPage() {
         </div>
       </div>
 
-      {/* Footer Section */}
-      <footer className="w-full py-4 px-4 bg-gray-800 text-white">
-        <div className="container mx-auto">
-          <div className="flex flex-col items-center justify-center space-y-3">
-            <div className="text-center">
-              <h3 className="text-sm font-medium mb-2">Follow Us</h3>
-              <div className="flex space-x-4">
-                <Link
-                  href="https://www.facebook.com/subhobrata.maity.96/"
-                  target="_blank"
-                  className="text-gray-300 hover:text-white"
-                >
-                  <Facebook className="h-5 w-5" />
-                  <span className="sr-only">Facebook</span>
-                </Link>
-                <Link
-                  href="https://www.instagram.com/subhox_maity/"
-                  target="_blank"
-                  className="text-gray-300 hover:text-white"
-                >
-                  <Instagram className="h-5 w-5" />
-                  <span className="sr-only">Instagram</span>
-                </Link>
-                <Link
-                  href="https://x.com/maity6449"
-                  target="_blank"
-                  className="text-gray-300 hover:text-white"
-                >
-                  <X className="h-5 w-5" />
-                  <span className="sr-only">X</span>
-                </Link>
-                <Link
-                  href="https://www.linkedin.com/in/subhobrata-maity-260b16259/"
-                  target="_blank"
-                  className="text-gray-300 hover:text-white"
-                >
-                  <Linkedin className="h-5 w-5" />
-                  <span className="sr-only">LinkedIn</span>
-                </Link>
-              </div>
-            </div>
-
-            <div className="text-center">
-              <h3 className="text-sm font-medium mb-2">Developer Team</h3>
-              <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-gray-300">
-                <Link
-                  href="https://www.linkedin.com/in/subhobrata-maity-260b16259/"
-                  target="_blank"
-                  className="text-gray-300 hover:text-white hover:underline"
-                >
-                  Subhobrata Maity
-                </Link>
-                <span>•</span>
-                <Link
-                  href="https://www.linkedin.com/in/prasenjit-datta/"
-                  target="_blank"
-                  className="text-gray-300 hover:text-white hover:underline"
-                >
-                  Prasenjit Datta
-                </Link>
-                <span>•</span>
-                <Link
-                  href="https://www.linkedin.com/in/debangshu-roy-5531b8272/"
-                  target="_blank"
-                  className="text-gray-300 hover:text-white hover:underline"
-                >
-                  Debangshu Roy
-                </Link>
-                <span>•</span>
-                <Link
-                  href="https://www.linkedin.com/in/gaurav-majumder-2484a1356/"
-                  target="_blank"
-                  className="text-gray-300 hover:text-white hover:underline"
-                >
-                  Gourav Majumder
-                </Link>
-                <span>•</span>
-                <Link
-                  href="https://www.linkedin.com/in/prem-ghosh-181414255"
-                  target="_blank"
-                  className="text-gray-300 hover:text-white hover:underline"
-                >
-                  Prem Ghosh
-                </Link>
-              </div>
-            </div>
-
-            <div className="text-xs text-gray-400 mt-2">
-              &copy; {new Date().getFullYear()} Cash-Box. All Rights Reserved.
-            </div>
-          </div>
-        </div>
-      </footer>
-
       {user?.profilePhoto && (
         <ImageViewer
           src={getProfilePhotoUrl(user.profilePhoto)}
@@ -795,6 +761,7 @@ export default function AccountsPage() {
           onClose={() => setIsImageViewerOpen(false)}
         />
       )}
+      <Footer />
     </div>
   );
 }

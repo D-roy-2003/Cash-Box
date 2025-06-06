@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { pool } from "@/lib/database";
+import { getPool } from "@/lib/database";
 import bcrypt from "bcryptjs";
 import { signJwt } from "@/lib/auth";
 import type { ResultSetHeader } from "mysql2/promise";
@@ -11,8 +11,8 @@ interface UserData {
 }
 
 function generateSuperkey(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = '';
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let result = "";
   for (let i = 0; i < 5; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
@@ -20,90 +20,91 @@ function generateSuperkey(): string {
 }
 
 export async function POST(request: Request) {
+  // Content-Type validation
+  if (!request.headers.get("content-type")?.includes("application/json")) {
+    return NextResponse.json(
+      { error: "Invalid content type" },
+      { status: 415 }
+    );
+  }
+
+  // Extract and validate request body
+  const { name, email, password } = (await request.json()) as Partial<UserData>;
+  if (!name?.trim() || !email?.trim() || !password) {
+    return NextResponse.json(
+      { error: "Missing required fields (name, email, password)" },
+      { status: 400 }
+    );
+  }
+
+  const trimmedName = name.trim();
+  const trimmedEmail = email.trim();
+  const hashedPassword = await bcrypt.hash(password, 10);
+
   let connection;
+
   try {
-    // Validate request
-    const contentType = request.headers.get("content-type");
-    if (!contentType?.includes("application/json")) {
-      return NextResponse.json(
-        { error: "Invalid content type" },
-        { status: 415 }
-      );
-    }
-
-    const { name, email, password } = (await request.json()) as Partial<UserData>;
-    
-    // Validate input
-    if (!name?.trim() || !email?.trim() || !password) {
-      return NextResponse.json(
-        { error: "Missing required fields (name, email, password)" },
-        { status: 400 }
-      );
-    }
-
+    const pool = await getPool();
     connection = await pool.getConnection();
     await connection.beginTransaction();
 
-    try {
-      let superkey;
-      let userCreated = false;
-      let attempts = 0;
-      const maxAttempts = 10;
+    const maxAttempts = 10;
+    for (let attempts = 0; attempts < maxAttempts; attempts++) {
+      const superkey = generateSuperkey();
 
-      // Retry loop for superkey uniqueness
-      while (!userCreated && attempts < maxAttempts) {
-        attempts++;
-        superkey = generateSuperkey();
+      try {
+        const [rawResult] = await connection.execute(
+          `INSERT INTO users (name, email, password, superkey)
+           VALUES (?, ?, ?, ?)`,
+          [trimmedName, trimmedEmail, hashedPassword, superkey]
+        );
 
-        try {
-          const [result] = await connection.execute<ResultSetHeader>(
-            `INSERT INTO users (name, email, password, superkey) 
-             VALUES (?, ?, ?, ?)`,
-            [name.trim(), email.trim(), await bcrypt.hash(password, 10), superkey]
+        const result = rawResult as ResultSetHeader;
+
+        if (result.affectedRows === 1) {
+          await connection.commit();
+
+          const token = await signJwt(result.insertId);
+
+          return NextResponse.json(
+            {
+              id: result.insertId,
+              name: trimmedName,
+              email: trimmedEmail,
+              superkey,
+              token,
+            },
+            { status: 201 }
           );
-
-          if (result.affectedRows === 1) {
-            userCreated = true;
-            await connection.commit();
-
-            return NextResponse.json(
-              {
-                id: result.insertId,
-                name: name.trim(),
-                email: email.trim(),
-                superkey,
-                token: await signJwt(result.insertId),
-              },
-              { status: 201 }
-            );
-          }
-        } catch (error: any) {
-          if (error.code === 'ER_DUP_ENTRY' && error.message.includes('superkey')) {
-            // Superkey collision, try again
+        }
+      } catch (error: any) {
+        if (error.code === "ER_DUP_ENTRY") {
+          if (error.message.includes("superkey")) {
+            // Retry on superkey conflict
             continue;
           }
-          throw error; // Re-throw other errors
+          if (error.message.includes("email")) {
+            await connection.rollback();
+            return NextResponse.json(
+              { error: "Email already exists" },
+              { status: 409 }
+            );
+          }
         }
-      }
 
-      throw new Error("Failed to generate unique superkey after maximum attempts");
-    } catch (error: any) {
-      await connection.rollback();
-      
-      if (error.code === 'ER_DUP_ENTRY' && error.message.includes('email')) {
-        return NextResponse.json(
-          { error: "Email already exists" },
-          { status: 409 }
-        );
+        // Re-throw unexpected DB errors
+        throw error;
       }
-
-      console.error("Signup error:", error);
-      return NextResponse.json(
-        { error: error.message || "Registration failed" },
-        { status: 500 }
-      );
     }
+
+    throw new Error("Failed to generate unique superkey after multiple attempts");
+  } catch (error: any) {
+    console.error("Signup error:", error);
+    return NextResponse.json(
+      { error: error.message || "Registration failed" },
+      { status: 500 }
+    );
   } finally {
     if (connection) await connection.release();
   }
-}
+} 

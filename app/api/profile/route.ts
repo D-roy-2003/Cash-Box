@@ -7,7 +7,7 @@ import { initializeDatabase } from "@/lib/database";
 
 interface UserProfile {
   id: string | number;
-  superkey: string; 
+  superkey: string;
   name: string;
   email: string;
   createdAt: string;
@@ -28,31 +28,74 @@ interface UpdateProfilePayload {
   profilePhoto?: string | null;
 }
 
-export async function GET(request: Request) {
-  await initializeDatabase();
-  const authHeader = request.headers.get("authorization");
+interface ErrorResponse {
+  error: string;
+  details?: string;
+  missingFields?: string[];
+}
 
+// Helper function to validate database connection
+async function ensureDatabaseConnection(): Promise<boolean> {
+  try {
+    await initializeDatabase();
+    const testConnection = await pool.getConnection();
+    await testConnection.ping();
+    testConnection.release();
+    return true;
+  } catch (error) {
+    console.error('Database connection error:', error);
+    return false;
+  }
+}
+
+// Helper function to create consistent error responses
+function createErrorResponse(error: string, status: number, details?: any): NextResponse {
+  const response: ErrorResponse = { error };
+  
+  if (details) {
+    if (typeof details === 'string') {
+      response.details = details;
+    } else if (Array.isArray(details)) {
+      response.missingFields = details;
+    } else {
+      response.details = JSON.stringify(details);
+    }
+  }
+
+  return NextResponse.json(response, { status });
+}
+
+export async function GET(request: Request): Promise<NextResponse> {
+  // Verify database connection first
+  const isDbConnected = await ensureDatabaseConnection();
+  if (!isDbConnected) {
+    return createErrorResponse("Database connection failed", 500);
+  }
+
+  const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
-    return NextResponse.json(
-      { error: "Missing or invalid authorization header" },
-      { status: 401 }
-    );
+    return createErrorResponse("Missing or invalid authorization header", 401);
   }
 
   const token = authHeader.slice(7);
   let connection: mysql.PoolConnection | undefined;
 
   try {
+    // Verify JWT token
     const decoded = await verifyJwt(token);
     if (!decoded?.userId) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+      return createErrorResponse("Invalid or expired token", 401);
     }
 
     connection = await pool.getConnection();
 
-    const [users] = await connection.query(
+    // Execute query with better type safety
+    const [users] = await connection.query<mysql.RowDataPacket[]>(
       `SELECT 
-        id, superkey, name, email, 
+        id, 
+        superkey, 
+        name, 
+        email, 
         created_at AS createdAt,
         store_name AS storeName, 
         store_address AS storeAddress, 
@@ -65,32 +108,61 @@ export async function GET(request: Request) {
       [decoded.userId]
     );
 
-    const user = (users as UserProfile[])[0];
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (!users || users.length === 0) {
+      return createErrorResponse("User not found", 404);
     }
 
-    return NextResponse.json(user);
+    const user = users[0] as UserProfile;
+    
+    // Validate required fields
+    const requiredFields = ['id', 'superkey', 'email'];
+    const missingFields = requiredFields.filter(field => !user[field as keyof UserProfile]);
+
+    if (missingFields.length > 0) {
+      console.error('Incomplete user data returned from database', { missingFields });
+      return createErrorResponse("Incomplete user data", 500, missingFields);
+    }
+
+    // Prepare response with proper typing
+    const responseData: UserProfile = {
+      ...user,
+      isProfileComplete: Boolean(user.isProfileComplete),
+      createdAt: user.createdAt || new Date().toISOString()
+    };
+
+    const response = NextResponse.json(responseData);
+    // Add caching headers
+    response.headers.set('Cache-Control', 'private, no-store, max-age=0');
+    return response;
+
   } catch (error) {
     console.error("GET /profile error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Database error" },
-      { status: 500 }
-    );
+    
+    if (error instanceof Error) {
+      if (error.message.includes('jwt expired')) {
+        return createErrorResponse("Session expired. Please log in again.", 401);
+      }
+      
+      if (error.message.includes('database')) {
+        return createErrorResponse("Database error occurred", 503, error.message);
+      }
+    }
+
+    return createErrorResponse("Internal server error", 500, (error as Error)?.message);
   } finally {
     if (connection) await connection.release();
   }
 }
 
-export async function PUT(request: Request) {
-  await initializeDatabase();
-  const authHeader = request.headers.get("authorization");
+export async function PUT(request: Request): Promise<NextResponse> {
+  const isDbConnected = await ensureDatabaseConnection();
+  if (!isDbConnected) {
+    return createErrorResponse("Database connection failed", 500);
+  }
 
+  const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
-    return NextResponse.json(
-      { error: "Authorization header missing or invalid" },
-      { status: 401 }
-    );
+    return createErrorResponse("Authorization header missing or invalid", 401);
   }
 
   const token = authHeader.split(" ")[1];
@@ -99,15 +171,12 @@ export async function PUT(request: Request) {
   try {
     const decoded = await verifyJwt(token);
     if (!decoded?.userId) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+      return createErrorResponse("Invalid token", 401);
     }
 
     const contentType = request.headers.get("content-type") || "";
     if (!contentType.includes("application/json")) {
-      return NextResponse.json(
-        { error: "Invalid content type. Must be application/json" },
-        { status: 400 }
-      );
+      return createErrorResponse("Invalid content type. Must be application/json", 400);
     }
 
     const updateData: UpdateProfilePayload = await request.json();
@@ -126,18 +195,12 @@ export async function PUT(request: Request) {
     );
 
     if (missingFields.length) {
-      return NextResponse.json(
-        { error: "Missing required fields", missingFields },
-        { status: 400 }
-      );
+      return createErrorResponse("Missing required fields", 400, missingFields);
     }
 
     // Additional validation for store contact (10 digits)
     if (!/^\d{10}$/.test(updateData.storeContact)) {
-      return NextResponse.json(
-        { error: "Store contact must be exactly 10 digits" },
-        { status: 400 }
-      );
+      return createErrorResponse("Store contact must be exactly 10 digits", 400);
     }
 
     // Determine if profile is complete
@@ -147,7 +210,7 @@ export async function PUT(request: Request) {
 
     connection = await pool.getConnection();
 
-    const [result]: any = await connection.query(
+    const [result] = await connection.query<mysql.OkPacket>(
       `UPDATE users SET 
         name = ?, 
         store_name = ?, 
@@ -170,14 +233,11 @@ export async function PUT(request: Request) {
     );
 
     if (result.affectedRows === 0) {
-      return NextResponse.json(
-        { error: "User not found or no changes made" },
-        { status: 404 }
-      );
+      return createErrorResponse("User not found or no changes made", 404);
     }
 
     // Get the updated user profile
-    const [updatedUser] = await connection.query(
+    const [updatedUser] = await connection.query<mysql.RowDataPacket[]>(
       `SELECT 
         id, superkey, name, email,
         created_at AS createdAt,
@@ -192,32 +252,37 @@ export async function PUT(request: Request) {
       [decoded.userId]
     );
 
+    if (!updatedUser || updatedUser.length === 0) {
+      return createErrorResponse("Failed to fetch updated profile", 500);
+    }
+
     return NextResponse.json({
       success: true,
-      updatedProfile: (updatedUser as UserProfile[])[0],
+      updatedProfile: updatedUser[0] as UserProfile,
       isProfileComplete,
     });
+
   } catch (error) {
     console.error("PUT /profile error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Update failed" },
-      { status: 500 }
+    return createErrorResponse(
+      "Update failed", 
+      500, 
+      (error as Error)?.message
     );
   } finally {
     if (connection) await connection.release();
   }
 }
 
-// Add this endpoint to handle just the completion status update
-export async function PATCH(request: Request) {
-  await initializeDatabase();
-  const authHeader = request.headers.get("authorization");
+export async function PATCH(request: Request): Promise<NextResponse> {
+  const isDbConnected = await ensureDatabaseConnection();
+  if (!isDbConnected) {
+    return createErrorResponse("Database connection failed", 500);
+  }
 
+  const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
-    return NextResponse.json(
-      { error: "Authorization header missing or invalid" },
-      { status: 401 }
-    );
+    return createErrorResponse("Authorization header missing or invalid", 401);
   }
 
   const token = authHeader.split(" ")[1];
@@ -226,34 +291,33 @@ export async function PATCH(request: Request) {
   try {
     const decoded = await verifyJwt(token);
     if (!decoded?.userId) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+      return createErrorResponse("Invalid token", 401);
     }
 
     const { isProfileComplete } = await request.json();
 
     connection = await pool.getConnection();
 
-    const [result]: any = await connection.query(
+    const [result] = await connection.query<mysql.OkPacket>(
       `UPDATE users SET profile_complete = ? WHERE id = ?`,
       [isProfileComplete ? 1 : 0, decoded.userId]
     );
 
     if (result.affectedRows === 0) {
-      return NextResponse.json(
-        { error: "User not found or no changes made" },
-        { status: 404 }
-      );
+      return createErrorResponse("User not found or no changes made", 404);
     }
 
     return NextResponse.json({
       success: true,
       isProfileComplete,
     });
+
   } catch (error) {
     console.error("PATCH /profile/complete error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Update failed" },
-      { status: 500 }
+    return createErrorResponse(
+      "Update failed", 
+      500, 
+      (error as Error)?.message
     );
   } finally {
     if (connection) await connection.release();

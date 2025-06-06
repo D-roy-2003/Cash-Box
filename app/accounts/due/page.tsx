@@ -184,7 +184,7 @@ export default function DuePage() {
             variant="outline"
             className="text-blue-600 border-blue-200 hover:bg-blue-50"
           >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Accounts
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
           </Button>
         </Link>
 

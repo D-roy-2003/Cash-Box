@@ -150,7 +150,7 @@ export default function SignupPage() {
           token: data.token,
         })
       );
-      router.push("/");
+      router.push("/accounts");
     } catch (err: any) {
       console.error("Signup error details:", {
         message: err.message,

@@ -46,6 +46,8 @@ const ReceiptSchema = z.object({
   dueTotal: z.number().min(0),
   items: z.array(ReceiptItemSchema).min(1, "At least one item is required"),
   paymentDetails: PaymentDetailsSchema.optional(),
+  gstPercentage: z.number().min(0).max(28).nullable().optional(),
+  gstAmount: z.number().min(0).optional(),
 });
 
 interface ReceiptItem {
@@ -70,6 +72,8 @@ export default function CreateReceipt() {
     items: [{ description: "", quantity: NaN, price: NaN }] as ReceiptItem[],
     total: 0,
     dueTotal: 0,
+    gstPercentage: null as number | null,
+    gstAmount: 0,
   });
 
   const [paymentDetails, setPaymentDetails] = useState<{
@@ -152,10 +156,16 @@ export default function CreateReceipt() {
   };
 
   useEffect(() => {
-    const total = receiptData.items.reduce(
+    const subtotal = receiptData.items.reduce(
       (sum, item) => sum + (isNaN(item.quantity) ? 0 : item.quantity) * (isNaN(item.price) ? 0 : item.price),
       0
     );
+    
+    const gstAmount = receiptData.gstPercentage 
+      ? (subtotal * receiptData.gstPercentage) / 100 
+      : 0;
+
+    const total = subtotal + gstAmount;
     let dueTotal = 0;
 
     if (receiptData.paymentStatus === "advance") {
@@ -172,8 +182,8 @@ export default function CreateReceipt() {
       );
     }
 
-    setReceiptData((prev) => ({ ...prev, total, dueTotal }));
-  }, [receiptData.items, receiptData.paymentStatus]);
+    setReceiptData((prev) => ({ ...prev, total, gstAmount, dueTotal }));
+  }, [receiptData.items, receiptData.paymentStatus, receiptData.gstPercentage]);
 
   const addItem = () => {
     setReceiptData((prev) => ({
@@ -301,6 +311,8 @@ export default function CreateReceipt() {
         items: receiptData.items,
         paymentDetails:
           Object.keys(paymentDetails).length > 0 ? paymentDetails : undefined,
+        gstPercentage: receiptData.gstPercentage || undefined,
+        gstAmount: receiptData.gstAmount || undefined,
       };
 
       const response = await fetch("/api/receipts", {
@@ -339,12 +351,12 @@ export default function CreateReceipt() {
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="flex justify-start mb-6">
-        <Link href="/">
+        <Link href="/accounts">
           <Button
             variant="outline"
             className="text-blue-600 border-blue-200 hover:bg-blue-50"
           >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Home
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
           </Button>
         </Link>
       </div>
@@ -391,6 +403,32 @@ export default function CreateReceipt() {
                 )}
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="gstPercentage">GST Percentage</Label>
+                <Select
+                  value={receiptData.gstPercentage?.toString() || ""}
+                  onValueChange={(value) => {
+                    const percentage = value ? parseInt(value) : null;
+                    setReceiptData(prev => ({
+                      ...prev,
+                      gstPercentage: percentage,
+                      gstAmount: percentage ? (prev.total * percentage) / 100 : 0
+                    }));
+                  }}
+                >
+                  <SelectTrigger id="gstPercentage">
+                    <SelectValue placeholder="No GST" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No GST</SelectItem>
+                    <SelectItem value="5">5%</SelectItem>
+                    <SelectItem value="12">12%</SelectItem>
+                    <SelectItem value="18">18%</SelectItem>
+                    <SelectItem value="28">28%</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               {receiptData.paymentStatus !== "due" && (
                 <div className="space-y-2">
                   <Label htmlFor="paymentType">Payment Type</Label>
@@ -418,25 +456,25 @@ export default function CreateReceipt() {
               <div className="space-y-2">
                 <Label htmlFor="paymentStatus">Payment Status</Label>
                 <Select
-                  value={receiptData.paymentStatus}
-                  onValueChange={(value) =>
-                    setReceiptData((prev) => ({
-                      ...prev,
-                      paymentStatus: value as "full" | "advance" | "due",
-                      paymentType: value === "due" ? "cash" : prev.paymentType,
-                    }))
-                  }
-                  required
-                >
-                  <SelectTrigger id="paymentStatus">
-                    <SelectValue placeholder="Select payment status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="full">Full Payment</SelectItem>
-                    <SelectItem value="advance">Advance Payment</SelectItem>
-                    <SelectItem value="due">Due Payment</SelectItem>
-                  </SelectContent>
-                </Select>
+                    value={receiptData.paymentStatus}
+                    onValueChange={(value) =>
+                      setReceiptData((prev) => ({
+                        ...prev,
+                        paymentStatus: value as "full" | "advance" | "due",
+                        paymentType: value === "due" ? "cash" : prev.paymentType,
+                      }))
+                    }
+                    required
+                  >
+                    <SelectTrigger id="paymentStatus">
+                      <SelectValue placeholder="Select payment status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="full">Full Payment</SelectItem>
+                      <SelectItem value="advance">Advance Payment</SelectItem>
+                      <SelectItem value="due">Due Payment</SelectItem>
+                    </SelectContent>
+                  </Select>
               </div>
             </div>
 
@@ -635,6 +673,24 @@ export default function CreateReceipt() {
               ))}
 
               <div className="flex justify-end gap-4 mt-4">
+                {receiptData.gstPercentage && (
+                  <div className="text-right">
+                    <div className="text-sm text-gray-500">Subtotal</div>
+                    <div className="text-lg">
+                      ₹{(receiptData.total - receiptData.gstAmount).toFixed(2)}
+                    </div>
+                  </div>
+                )}
+                
+                {receiptData.gstPercentage && (
+                  <div className="text-right">
+                    <div className="text-sm text-gray-500">GST ({receiptData.gstPercentage}%)</div>
+                    <div className="text-lg">
+                      ₹{receiptData.gstAmount.toFixed(2)}
+                    </div>
+                  </div>
+                )}
+
                 <div className="text-right">
                   <div className="text-sm text-gray-500">Total</div>
                   <div className="text-xl font-bold">
