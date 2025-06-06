@@ -406,27 +406,27 @@ export default function CreateReceipt() {
               <div className="space-y-2">
                 <Label htmlFor="gstPercentage">GST Percentage</Label>
                 <Select
-                  value={receiptData.gstPercentage?.toString() || ""}
-                  onValueChange={(value) => {
-                    const percentage = value ? parseInt(value) : null;
-                    setReceiptData(prev => ({
-                      ...prev,
-                      gstPercentage: percentage,
-                      gstAmount: percentage ? (prev.total * percentage) / 100 : 0
-                    }));
-                  }}
-                >
-                  <SelectTrigger id="gstPercentage">
-                    <SelectValue placeholder="No GST" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">No GST</SelectItem>
-                    <SelectItem value="5">5%</SelectItem>
-                    <SelectItem value="12">12%</SelectItem>
-                    <SelectItem value="18">18%</SelectItem>
-                    <SelectItem value="28">28%</SelectItem>
-                  </SelectContent>
-                </Select>
+  value={receiptData.gstPercentage ? receiptData.gstPercentage.toString() : "none"}
+  onValueChange={(value) => {
+    const percentage = value === "none" ? null : parseInt(value);
+    setReceiptData(prev => ({
+      ...prev,
+      gstPercentage: percentage,
+      gstAmount: percentage ? (prev.total * percentage) / 100 : 0
+    }));
+  }}
+>
+  <SelectTrigger id="gstPercentage">
+    <SelectValue placeholder="No GST" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="none">No GST</SelectItem>
+    <SelectItem value="5">5%</SelectItem>
+    <SelectItem value="12">12%</SelectItem>
+    <SelectItem value="18">18%</SelectItem>
+    <SelectItem value="28">28%</SelectItem>
+  </SelectContent>
+</Select>
               </div>
 
               {receiptData.paymentStatus !== "due" && (

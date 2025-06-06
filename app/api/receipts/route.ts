@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
-import { pool } from "@/lib/database";
+import { getPool } from "@/lib/database";
 import { verifyJwt } from "@/lib/auth";
 
 interface ReceiptItem {
@@ -30,6 +30,8 @@ interface ReceiptBody {
   dueTotal: number;
   items: ReceiptItem[];
   paymentDetails?: PaymentDetails;
+  gstPercentage?: number;
+  gstAmount?: number;
 }
 
 interface JwtPayload {
@@ -38,12 +40,22 @@ interface JwtPayload {
 }
 
 function formatLocalDateForMySQL(date: Date | string): string {
-  const d = new Date(date);
-  if (isNaN(d.getTime())) {
-    throw new Error("Invalid date format");
-  }
+  let d: Date;
   
-  // Format as YYYY-MM-DD HH:MM:SS in local time
+  if (typeof date === 'string') {
+    if (date.includes('T')) {
+      d = new Date(date);
+    } else {
+      d = new Date(date + 'T00:00:00');
+    }
+  } else {
+    d = new Date(date);
+  }
+
+  if (isNaN(d.getTime())) {
+    throw new Error(`Invalid date format: ${date}`);
+  }
+
   const pad = (num: number) => num.toString().padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
          `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
@@ -82,11 +94,29 @@ function validateReceiptBody(body: ReceiptBody): string | null {
   if (body.paymentStatus === 'full' && body.dueTotal !== 0) {
     return "Due total must be 0 for full payment";
   }
-  if (body.paymentStatus === 'advance' && body.dueTotal <= 0) {
-    return "Due total must be positive for advance payment";
+
+  if (body.paymentStatus === 'advance') {
+    const totalAdvance = body.items.reduce((sum, item) => sum + (item.advanceAmount || 0), 0);
+    if (totalAdvance <= 0) {
+      return "Advance payment must have positive advance amounts";
+    }
+    if (Math.abs(totalAdvance - (body.total - body.dueTotal)) > 0.01) {
+      return "Advance amounts don't match calculated total";
+    }
   }
-  if (body.paymentStatus === 'due' && body.total <= 0) {
-    return "Total must be positive for due payment";
+
+  if (body.paymentStatus === 'due') {
+    const totalDue = body.items.reduce((sum, item) => sum + (item.dueAmount || 0), 0);
+    if (totalDue <= 0) {
+      return "Due payment must have positive due amounts";
+    }
+    if (Math.abs(totalDue - body.dueTotal) > 0.01) {
+      return "Item due amounts don't match total due amount";
+    }
+  }
+
+  if (body.gstPercentage && (body.gstPercentage < 0 || body.gstPercentage > 28)) {
+    return "GST percentage must be between 0 and 28";
   }
 
   return null;
@@ -97,33 +127,43 @@ async function createReceipt(
   body: ReceiptBody,
   userId: string
 ): Promise<number> {
-  const normalizedStatus = body.paymentStatus.toLowerCase();
-  const normalizedType = body.paymentType.toLowerCase();
-  const createdAt = formatLocalDateForMySQL(new Date());
-  const formattedDate = formatLocalDateForMySQL(body.date);
+  console.log("Creating receipt with data:", {
+    receiptNumber: body.receiptNumber,
+    customerName: body.customerName,
+    total: body.total
+  });
 
-  const [result] = await connection.query<mysql.ResultSetHeader>(
-    `INSERT INTO receipts (
-      receipt_number, date, customer_name, customer_contact, customer_country_code,
-      payment_type, payment_status, notes, total, due_total, user_id, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      body.receiptNumber,
-      formattedDate,
-      body.customerName,
-      body.customerContact,
-      body.customerCountryCode,
-      normalizedType,
-      normalizedStatus,
-      body.notes || null,
-      body.total,
-      body.dueTotal,
-      userId,
-      createdAt,
-    ]
-  );
+  try {
+    const [result] = await connection.query<mysql.ResultSetHeader>(
+      `INSERT INTO receipts (
+        receipt_number, date, customer_name, customer_contact, customer_country_code,
+        payment_type, payment_status, notes, total, due_total, user_id, created_at,
+        gst_percentage, gst_amount
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        body.receiptNumber,
+        formatLocalDateForMySQL(body.date),
+        body.customerName,
+        body.customerContact,
+        body.customerCountryCode,
+        body.paymentType.toLowerCase(),
+        body.paymentStatus.toLowerCase(),
+        body.notes || null,
+        body.total,
+        body.dueTotal,
+        userId,
+        formatLocalDateForMySQL(new Date()),
+        body.gstPercentage || null,
+        body.gstAmount || null
+      ]
+    );
 
-  return result.insertId;
+    console.log("Receipt created with ID:", result.insertId);
+    return result.insertId;
+  } catch (error) {
+    console.error("Error creating receipt:", error);
+    throw new Error("Failed to create receipt record");
+  }
 }
 
 async function processReceiptItems(
@@ -131,39 +171,63 @@ async function processReceiptItems(
   receiptId: number,
   items: ReceiptItem[]
 ): Promise<void> {
-  for (const item of items) {
-    await connection.query(
-      `INSERT INTO receipt_items (
-        receipt_id, description, quantity, price, advance_amount, due_amount
-      ) VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        receiptId,
-        item.description,
-        item.quantity,
-        item.price,
-        item.advanceAmount ?? 0,
-        item.dueAmount ?? 0,
-      ]
-    );
+  console.log("Processing receipt items for receipt ID:", receiptId);
+  
+  try {
+    for (const [index, item] of items.entries()) {
+      console.log(`Processing item ${index + 1}:`, {
+        description: item.description,
+        quantity: item.quantity,
+        price: item.price
+      });
+
+      await connection.query(
+        `INSERT INTO receipt_items (
+          receipt_id, description, quantity, price, advance_amount, due_amount
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          receiptId,
+          item.description,
+          item.quantity,
+          item.price,
+          item.advanceAmount ?? 0,
+          item.dueAmount ?? 0,
+        ]
+      );
+    }
+    console.log("All items processed successfully");
+  } catch (error) {
+    console.error("Error processing receipt items:", error);
+    throw new Error("Failed to process receipt items");
   }
 }
 
 async function processPaymentDetails(
   connection: mysql.PoolConnection,
   receiptId: number,
-  paymentDetails: PaymentDetails
+  paymentDetails?: PaymentDetails
 ): Promise<void> {
-  await connection.query(
-    `INSERT INTO payment_details (
-      receipt_id, card_number, phone_number, phone_country_code
-    ) VALUES (?, ?, ?, ?)`,
-    [
-      receiptId,
-      paymentDetails.cardNumber || null,
-      paymentDetails.phoneNumber || null,
-      paymentDetails.phoneCountryCode || null,
-    ]
-  );
+  if (!paymentDetails) return;
+
+  console.log("Processing payment details for receipt ID:", receiptId);
+  
+  try {
+    await connection.query(
+      `INSERT INTO payment_details (
+        receipt_id, card_number, phone_number, phone_country_code
+      ) VALUES (?, ?, ?, ?)`,
+      [
+        receiptId,
+        paymentDetails.cardNumber || null,
+        paymentDetails.phoneNumber || null,
+        paymentDetails.phoneCountryCode || null,
+      ]
+    );
+    console.log("Payment details processed successfully");
+  } catch (error) {
+    console.error("Error processing payment details:", error);
+    throw new Error("Failed to process payment details");
+  }
 }
 
 async function processDueRecords(
@@ -172,7 +236,11 @@ async function processDueRecords(
   body: ReceiptBody,
   userId: string
 ): Promise<void> {
-  if (body.paymentStatus === 'due') {
+  if (body.paymentStatus !== 'due') return;
+
+  console.log("Processing due records for receipt ID:", receiptId);
+  
+  try {
     const productOrdered = body.items.map((i) => i.description).join(", ");
     const totalQuantity = body.items.reduce((sum, i) => sum + i.quantity, 0);
     const expectedPaymentDate = new Date();
@@ -196,6 +264,10 @@ async function processDueRecords(
         body.receiptNumber,
       ]
     );
+    console.log("Due records processed successfully");
+  } catch (error) {
+    console.error("Error processing due records:", error);
+    throw new Error("Failed to process due records");
   }
 }
 
@@ -205,41 +277,51 @@ async function processAccountTransaction(
   body: ReceiptBody,
   userId: string
 ): Promise<void> {
-  const createdAt = formatLocalDateForMySQL(new Date());
-  
-  let transactionAmount = 0;
-  let particulars = '';
-  
-  if (body.paymentStatus === 'full') {
-    transactionAmount = body.total;
-    particulars = `Full payment from ${body.customerName} (Receipt: ${body.receiptNumber})`;
-  } else if (body.paymentStatus === 'advance') {
-    transactionAmount = body.total - body.dueTotal;
-    particulars = `Advance payment from ${body.customerName} (Receipt: ${body.receiptNumber})`;
-  } else if (body.paymentStatus === 'due') {
-    return;
-  }
+  if (body.paymentStatus === 'due') return;
 
-  if (transactionAmount > 0) {
-    await connection.query(
-      `INSERT INTO account_transactions (
-        particulars, amount, type, user_id, receipt_id, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        particulars,
-        transactionAmount,
-        "credit",
-        userId,
-        receiptId,
-        createdAt,
-      ]
-    );
+  console.log("Processing account transaction for receipt ID:", receiptId);
+  
+  try {
+    const createdAt = formatLocalDateForMySQL(new Date());
+    let transactionAmount = 0;
+    let particulars = '';
+    
+    if (body.paymentStatus === 'full') {
+      transactionAmount = body.total;
+      particulars = `Full payment from ${body.customerName} (Receipt: ${body.receiptNumber})`;
+    } else if (body.paymentStatus === 'advance') {
+      transactionAmount = body.total - body.dueTotal;
+      particulars = `Advance payment from ${body.customerName} (Receipt: ${body.receiptNumber})`;
+    }
+
+    if (transactionAmount > 0) {
+      await connection.query(
+        `INSERT INTO account_transactions (
+          particulars, amount, type, user_id, receipt_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          particulars,
+          transactionAmount,
+          "credit",
+          userId,
+          receiptId,
+          createdAt,
+        ]
+      );
+      console.log("Account transaction processed successfully");
+    }
+  } catch (error) {
+    console.error("Error processing account transaction:", error);
+    throw new Error("Failed to process account transaction");
   }
 }
 
 export async function POST(request: Request) {
+  console.log("Receipt creation request received");
+  
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
+    console.error("Unauthorized - No bearer token");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -249,18 +331,26 @@ export async function POST(request: Request) {
   try {
     const decoded = await verifyJwt(token);
     if (!decoded?.userId) {
+      console.error("Invalid token - No user ID");
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
     const userId = String(decoded.userId);
+    console.log("Authenticated user ID:", userId);
 
     const body: ReceiptBody = await request.json();
+    console.log("Request body received:", JSON.stringify(body, null, 2));
+
     const validationError = validateReceiptBody(body);
     if (validationError) {
+      console.error("Validation error:", validationError);
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
     connection = await pool.getConnection();
+    console.log("Database connection acquired");
+    
     await connection.beginTransaction();
+    console.log("Transaction started");
 
     const receiptId = await createReceipt(connection, body, userId);
     await processReceiptItems(connection, receiptId, body.items);
@@ -278,6 +368,7 @@ export async function POST(request: Request) {
     }
 
     await connection.commit();
+    console.log("Transaction committed successfully");
 
     return NextResponse.json({
       success: true,
@@ -285,9 +376,12 @@ export async function POST(request: Request) {
       message: "Receipt created successfully",
     });
   } catch (error: unknown) {
+    console.error("Error in receipt creation:", error);
+    
     if (connection) {
       try {
         await connection.rollback();
+        console.log("Transaction rolled back");
       } catch (rollbackError) {
         console.error("Rollback failed:", rollbackError);
       }
@@ -296,16 +390,26 @@ export async function POST(request: Request) {
     let errorMessage = "Unknown error occurred";
     if (error instanceof Error) {
       errorMessage = error.message;
-      if (error.message.includes('Data truncated for column')) {
-        errorMessage = "Invalid payment status value provided";
+      
+      if (error.message.includes('Data truncated')) {
+        errorMessage = "Invalid data format for one of the fields";
+      } else if (error.message.includes('foreign key constraint')) {
+        errorMessage = "Invalid user reference";
+      } else if (error.message.includes('Duplicate entry')) {
+        errorMessage = "Receipt number already exists";
       }
     }
     
-    console.error("Receipt creation error:", error);
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json({ 
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? 
+        (error instanceof Error ? error.stack : null) : 
+        undefined
+    }, { status: 500 });
   } finally {
     if (connection) {
       await connection.release();
+      console.log("Database connection released");
     }
   }
 }
