@@ -1,6 +1,6 @@
 // app/api/receipts/next-number/route.ts
 import { NextResponse } from "next/server";
-import { pool } from "@/lib/database";
+import { getPool } from "@/lib/database";
 import { verifyJwt } from "@/lib/auth";
 
 export async function GET(request: Request) {
@@ -19,6 +19,7 @@ export async function GET(request: Request) {
     }
     const userId = decoded.userId;
 
+    const pool = await getPool();
     connection = await pool.getConnection();
 
     // Fetch user's store details

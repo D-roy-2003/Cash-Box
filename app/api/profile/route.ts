@@ -1,7 +1,7 @@
 // app/api/profile/route.ts
 import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
-import { pool } from "@/lib/database";
+import { getPool } from "@/lib/database";
 import { verifyJwt } from "@/lib/auth";
 import { initializeDatabase } from "@/lib/database";
 
@@ -38,6 +38,7 @@ interface ErrorResponse {
 async function ensureDatabaseConnection(): Promise<boolean> {
   try {
     await initializeDatabase();
+    const pool = await getPool();
     const testConnection = await pool.getConnection();
     await testConnection.ping();
     testConnection.release();
@@ -87,10 +88,11 @@ export async function GET(request: Request): Promise<NextResponse> {
       return createErrorResponse("Invalid or expired token", 401);
     }
 
+    const pool = await getPool();
     connection = await pool.getConnection();
 
     // Execute query with better type safety
-    const [users] = await connection.query<mysql.RowDataPacket[]>(
+    const [users] = await connection!.query<mysql.RowDataPacket[]>(
       `SELECT 
         id, 
         superkey, 
@@ -135,7 +137,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     response.headers.set('Cache-Control', 'private, no-store, max-age=0');
     return response;
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("GET /profile error:", error);
     
     if (error instanceof Error) {
@@ -150,7 +152,13 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     return createErrorResponse("Internal server error", 500, (error as Error)?.message);
   } finally {
-    if (connection) await connection.release();
+    if (connection) {
+      try {
+        await connection.release();
+      } catch (e) {
+        // ignore
+      }
+    }
   }
 }
 
@@ -208,9 +216,10 @@ export async function PUT(request: Request): Promise<NextResponse> {
       (field) => updateData[field as keyof UpdateProfilePayload]
     );
 
+    const pool = await getPool();
     connection = await pool.getConnection();
 
-    const [result] = await connection.query<mysql.OkPacket>(
+    const [result] = await connection!.query<mysql.OkPacket>(
       `UPDATE users SET 
         name = ?, 
         store_name = ?, 
@@ -237,7 +246,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
     }
 
     // Get the updated user profile
-    const [updatedUser] = await connection.query<mysql.RowDataPacket[]>(
+    const [updatedUser] = await connection!.query<mysql.RowDataPacket[]>(
       `SELECT 
         id, superkey, name, email,
         created_at AS createdAt,
@@ -262,7 +271,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
       isProfileComplete,
     });
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("PUT /profile error:", error);
     return createErrorResponse(
       "Update failed", 
@@ -270,7 +279,13 @@ export async function PUT(request: Request): Promise<NextResponse> {
       (error as Error)?.message
     );
   } finally {
-    if (connection) await connection.release();
+    if (connection) {
+      try {
+        await connection.release();
+      } catch (e) {
+        // ignore
+      }
+    }
   }
 }
 
@@ -296,9 +311,10 @@ export async function PATCH(request: Request): Promise<NextResponse> {
 
     const { isProfileComplete } = await request.json();
 
+    const pool = await getPool();
     connection = await pool.getConnection();
 
-    const [result] = await connection.query<mysql.OkPacket>(
+    const [result] = await connection!.query<mysql.OkPacket>(
       `UPDATE users SET profile_complete = ? WHERE id = ?`,
       [isProfileComplete ? 1 : 0, decoded.userId]
     );
@@ -312,7 +328,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       isProfileComplete,
     });
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("PATCH /profile/complete error:", error);
     return createErrorResponse(
       "Update failed", 
@@ -320,6 +336,12 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       (error as Error)?.message
     );
   } finally {
-    if (connection) await connection.release();
+    if (connection) {
+      try {
+        await connection.release();
+      } catch (e) {
+        // ignore
+      }
+    }
   }
 }

@@ -69,7 +69,7 @@ export default function CreateReceipt() {
     paymentType: "cash" as "cash" | "online",
     paymentStatus: "full" as "full" | "advance" | "due",
     notes: "",
-    items: [{ description: "", quantity: NaN, price: NaN }] as ReceiptItem[],
+    items: [{ description: "", quantity: 0, price: 0 }] as ReceiptItem[],
     total: 0,
     dueTotal: 0,
     gstPercentage: null as number | null,
@@ -115,9 +115,9 @@ export default function CreateReceipt() {
 
         setReceiptData((prev) => ({ ...prev, receiptNumber }));
         setUser(profile);
-      } catch (error) {
+      } catch (error: unknown) {
         console.error("Initialization error:", error);
-        setErrors({ form: error.message || "Initialization failed" });
+        setErrors({ form: error instanceof Error ? error.message : "Initialization failed" });
       } finally {
         setIsLoading(false);
       }
@@ -157,13 +157,18 @@ export default function CreateReceipt() {
 
   useEffect(() => {
     const subtotal = receiptData.items.reduce(
-      (sum, item) => sum + (isNaN(item.quantity) ? 0 : item.quantity) * (isNaN(item.price) ? 0 : item.price),
+      (sum, item) => sum + 
+        (typeof item.quantity === 'number' && !isNaN(item.quantity) ? item.quantity : 0) * 
+        (typeof item.price === 'number' && !isNaN(item.price) ? item.price : 0),
       0
     );
     
-    const gstAmount = receiptData.gstPercentage 
-      ? (subtotal * receiptData.gstPercentage) / 100 
+    // Ensure gstPercentage is a valid number before calculation
+    const effectiveGstPercentage = typeof receiptData.gstPercentage === 'number' && !isNaN(receiptData.gstPercentage)
+      ? receiptData.gstPercentage
       : 0;
+
+    const gstAmount = (subtotal * effectiveGstPercentage) / 100;
 
     const total = subtotal + gstAmount;
     let dueTotal = 0;
@@ -172,12 +177,12 @@ export default function CreateReceipt() {
       dueTotal =
         total -
         receiptData.items.reduce(
-          (sum, item) => sum + (isNaN(item.advanceAmount) ? 0 : (item.advanceAmount || 0)),
+          (sum, item) => sum + (typeof item.advanceAmount === 'number' && !isNaN(item.advanceAmount) ? item.advanceAmount : 0),
           0
         );
     } else if (receiptData.paymentStatus === "due") {
       dueTotal = receiptData.items.reduce(
-        (sum, item) => sum + (isNaN(item.dueAmount) ? 0 : (item.dueAmount || 0)),
+        (sum, item) => sum + (typeof item.dueAmount === 'number' && !isNaN(item.dueAmount) ? item.dueAmount : 0),
         0
       );
     }
@@ -188,7 +193,7 @@ export default function CreateReceipt() {
   const addItem = () => {
     setReceiptData((prev) => ({
       ...prev,
-      items: [...prev.items, { description: "", quantity: NaN, price: NaN }],
+      items: [...prev.items, { description: "", quantity: 0, price: 0 }],
     }));
   };
 
@@ -211,11 +216,11 @@ export default function CreateReceipt() {
             ? value
             : field === "quantity"
             ? value === ""
-              ? NaN
-              : Math.max(parseInt(value) || NaN, 1)
+              ? 0
+              : Math.max(parseInt(value) || 0, 0)
             : value === ""
-            ? NaN
-            : parseFloat(value) || NaN
+            ? 0
+            : parseFloat(value) || 0
           : value;
       newItems[index] = { ...newItems[index], [field]: parsedValue };
       return { ...prev, items: newItems };
@@ -331,8 +336,8 @@ export default function CreateReceipt() {
 
       const result = await response.json();
       router.push(`/receipts/${result.receiptId}`);
-    } catch (error: any) {
-      setErrors((prev) => ({ ...prev, form: error.message }));
+    } catch (error: unknown) {
+      setErrors((prev) => ({ ...prev, form: error instanceof Error ? error.message : "An unexpected error occurred." }));
     } finally {
       setIsSubmitting(false);
     }
@@ -403,31 +408,33 @@ export default function CreateReceipt() {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="gstPercentage">GST Percentage</Label>
-                <Select
-  value={receiptData.gstPercentage ? receiptData.gstPercentage.toString() : "none"}
-  onValueChange={(value) => {
-    const percentage = value === "none" ? null : parseInt(value);
-    setReceiptData(prev => ({
-      ...prev,
-      gstPercentage: percentage,
-      gstAmount: percentage ? (prev.total * percentage) / 100 : 0
-    }));
-  }}
->
-  <SelectTrigger id="gstPercentage">
-    <SelectValue placeholder="No GST" />
-  </SelectTrigger>
-  <SelectContent>
-    <SelectItem value="none">No GST</SelectItem>
-    <SelectItem value="5">5%</SelectItem>
-    <SelectItem value="12">12%</SelectItem>
-    <SelectItem value="18">18%</SelectItem>
-    <SelectItem value="28">28%</SelectItem>
-  </SelectContent>
-</Select>
-              </div>
+              {receiptData.paymentStatus !== "due" && (
+                <div className="space-y-2">
+                  <Label htmlFor="gstPercentage">GST Percentage</Label>
+                  <Select
+                    value={receiptData.gstPercentage ? receiptData.gstPercentage.toString() : "none"}
+                    onValueChange={(value) => {
+                      const percentage = value === "none" ? null : parseInt(value);
+                      setReceiptData(prev => ({
+                        ...prev,
+                        gstPercentage: percentage,
+                        gstAmount: percentage ? (prev.total * percentage) / 100 : 0
+                      }));
+                    }}
+                  >
+                    <SelectTrigger id="gstPercentage">
+                      <SelectValue placeholder="No GST" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No GST</SelectItem>
+                      <SelectItem value="5">5%</SelectItem>
+                      <SelectItem value="12">12%</SelectItem>
+                      <SelectItem value="18">18%</SelectItem>
+                      <SelectItem value="28">28%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {receiptData.paymentStatus !== "due" && (
                 <div className="space-y-2">
@@ -457,13 +464,16 @@ export default function CreateReceipt() {
                 <Label htmlFor="paymentStatus">Payment Status</Label>
                 <Select
                     value={receiptData.paymentStatus}
-                    onValueChange={(value) =>
+                    onValueChange={(value) => {
+                      const newStatus = value as "full" | "advance" | "due";
                       setReceiptData((prev) => ({
                         ...prev,
-                        paymentStatus: value as "full" | "advance" | "due",
-                        paymentType: value === "due" ? "cash" : prev.paymentType,
-                      }))
-                    }
+                        paymentStatus: newStatus,
+                        paymentType: newStatus === "due" ? "cash" : prev.paymentType,
+                        gstPercentage: newStatus === "due" ? null : prev.gstPercentage,
+                        gstAmount: newStatus === "due" ? 0 : prev.gstAmount
+                      }));
+                    }}
                     required
                   >
                     <SelectTrigger id="paymentStatus">
@@ -569,10 +579,10 @@ export default function CreateReceipt() {
                       id={`item-${index}-quantity`}
                       type="number"
                       min="1"
-                      value={isNaN(item.quantity) ? "" : item.quantity}
+                      value={item.quantity === 0 ? "" : item.quantity}
                       onChange={(e) => {
                         const value = parseInt(e.target.value);
-                        updateItem(index, "quantity", isNaN(value) ? NaN : Math.max(value, 1));
+                        updateItem(index, "quantity", isNaN(value) ? 0 : Math.max(value, 0));
                       }}
                       required
                       onKeyDown={(e) => {
@@ -593,10 +603,10 @@ export default function CreateReceipt() {
                       type="number"
                       min="0"
                       step="1"
-                      value={isNaN(item.price) ? "" : item.price}
+                      value={item.price === 0 ? "" : item.price}
                       onChange={(e) => {
                         const value = parseFloat(e.target.value);
-                        updateItem(index, "price", isNaN(value) ? NaN : Math.max(value, 0));
+                        updateItem(index, "price", isNaN(value) ? 0 : Math.max(value, 0));
                       }}
                       required
                       onKeyDown={(e) => {
@@ -673,7 +683,7 @@ export default function CreateReceipt() {
               ))}
 
               <div className="flex justify-end gap-4 mt-4">
-                {receiptData.gstPercentage && (
+                {receiptData.gstPercentage && receiptData.paymentStatus !== "due" && (
                   <div className="text-right">
                     <div className="text-sm text-gray-500">Subtotal</div>
                     <div className="text-lg">
@@ -682,7 +692,7 @@ export default function CreateReceipt() {
                   </div>
                 )}
                 
-                {receiptData.gstPercentage && (
+                {receiptData.gstPercentage && receiptData.paymentStatus !== "due" && (
                   <div className="text-right">
                     <div className="text-sm text-gray-500">GST ({receiptData.gstPercentage}%)</div>
                     <div className="text-lg">

@@ -215,6 +215,17 @@ export default function AccountsPage() {
 
   useEffect(() => {
     fetchData();
+
+    const handleDueRecordPaid = () => {
+      console.log("Due record paid event received. Refreshing data...");
+      fetchData(true); // Re-fetch all data, showing refresh spinner
+    };
+
+    window.addEventListener('dueRecordPaid', handleDueRecordPaid);
+
+    return () => {
+      window.removeEventListener('dueRecordPaid', handleDueRecordPaid);
+    };
   }, [router]);
 
   const saveData = (newTransactions: Transaction[], newBalance: number) => {

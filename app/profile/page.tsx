@@ -441,12 +441,12 @@ export default function ProfilePage() {
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="flex justify-between items-center mb-6">
-        <Link href="/">
+        <Link href="/accounts">
           <Button
             variant="outline"
             className="text-blue-600 border-blue-200 hover:bg-blue-50"
           >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Home
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
           </Button>
         </Link>
 

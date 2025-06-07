@@ -119,6 +119,9 @@ export default function DuePage() {
         `Payment from ${record.customerName} recorded successfully`
       );
 
+      // Dispatch a custom event to notify other parts of the app to refresh data
+      window.dispatchEvent(new CustomEvent('dueRecordPaid'));
+
       // Optionally refresh the data to ensure consistency
       // fetchDueRecords(false)
     } catch (err) {

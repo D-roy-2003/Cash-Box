@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
-import { pool } from "@/lib/database";
+import { getPool } from "@/lib/database";
 import { verifyJwt } from "@/lib/auth";
 
 interface DueRecord {
@@ -54,9 +54,10 @@ export async function GET(request: Request) {
 
   try {
     const { userId } = await verifyToken(request);
+    const pool = await getPool();
     connection = await pool.getConnection();
 
-    const [dueRecords] = await connection.query<mysql.RowDataPacket[]>(
+    const [dueRecords] = await connection!.query<mysql.RowDataPacket[]>(
       `SELECT 
         id, 
         customer_name,
@@ -131,12 +132,13 @@ export async function PUT(request: Request) {
       );
     }
 
+    const pool = await getPool();
     connection = await pool.getConnection();
-    await connection.beginTransaction();
+    await connection!.beginTransaction();
 
     try {
       // 1. Get the due record details first (before updating)
-      const [dueRecords] = await connection.query<mysql.RowDataPacket[]>(
+      const [dueRecords] = await connection!.query<mysql.RowDataPacket[]>(
         `SELECT customer_name, amount_due, is_paid, receipt_number
          FROM due_records 
          WHERE id = ? AND user_id = ?`,
@@ -154,7 +156,7 @@ export async function PUT(request: Request) {
       }
 
       // 2. Mark the due record as paid
-      const [updateResult] = await connection.query<mysql.ResultSetHeader>(
+      const [updateResult] = await connection!.query<mysql.ResultSetHeader>(
         `UPDATE due_records 
          SET is_paid = TRUE, paid_at = NOW()
          WHERE id = ? AND user_id = ? AND is_paid = FALSE`,
@@ -174,7 +176,7 @@ export async function PUT(request: Request) {
         due_record_id: dueId,
       };
 
-      await connection.query(
+      await connection!.query(
         `INSERT INTO account_transactions
          (particulars, amount, type, user_id, due_record_id, created_at)
          VALUES (?, ?, ?, ?, ?, NOW())`,
@@ -187,15 +189,15 @@ export async function PUT(request: Request) {
         ]
       );
 
-      await connection.commit();
+      await connection!.commit();
       
       return NextResponse.json({ 
         success: true,
         message: "Payment processed successfully",
         amountProcessed: transactionData.amount
       });
-    } catch (error) {
-      await connection.rollback();
+    } catch (error: unknown) {
+      await connection!.rollback();
       throw error;
     }
   } catch (error: unknown) {

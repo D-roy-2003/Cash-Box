@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
-import { pool } from "@/lib/database";
+import { getPool } from "@/lib/database";
 
 interface ReceiptPreview {
   receiptId: string | number;
@@ -20,6 +20,7 @@ interface ReceiptPreview {
   items: ReceiptItem[];
   paymentDetails: PaymentDetails;
   storeInfo: StoreInfo;
+  totalTax: number;
 }
 
 interface ReceiptItem {
@@ -106,9 +107,10 @@ export async function GET(
   let connection: mysql.PoolConnection | undefined;
 
   try {
+    const pool = await getPool();
     connection = await pool.getConnection();
 
-    const [receipts] = await connection.query<mysql.RowDataPacket[]>(
+    const [receipts] = await connection!.query<mysql.RowDataPacket[]>(
       `SELECT 
         r.id, r.receipt_number, 
         DATE_FORMAT(r.date, '%Y-%m-%d') as date,
@@ -117,6 +119,7 @@ export async function GET(
         r.customer_name, r.customer_contact, r.customer_country_code,
         r.payment_type, r.payment_status, r.notes,
         r.total, r.due_total, r.user_id,
+        r.total_tax AS totalTax,
         u.store_name AS storeName,
         u.store_address AS storeAddress,
         u.store_contact AS storeContact,
@@ -133,7 +136,7 @@ export async function GET(
 
     const receipt = receipts[0];
 
-    const [items] = await connection.query<mysql.RowDataPacket[]>(
+    const [items] = await connection!.query<mysql.RowDataPacket[]>(
       `SELECT 
         description, quantity, price, 
         advance_amount AS advanceAmount, 
@@ -143,7 +146,7 @@ export async function GET(
       [params.id]
     );
 
-    const [paymentDetailsRows] = await connection.query<mysql.RowDataPacket[]>(
+    const [paymentDetailsRows] = await connection!.query<mysql.RowDataPacket[]>(
       `SELECT 
         card_number AS cardNumber, 
         phone_number AS phoneNumber, 
@@ -170,6 +173,7 @@ export async function GET(
       total: receipt.total,
       dueTotal: receipt.due_total,
       userId: receipt.user_id,
+      totalTax: receipt.totalTax || 0,
       items: items.map((item) => ({
         description: item.description,
         quantity: item.quantity,
@@ -204,6 +208,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
+    const pool = await getPool();
     connection = await pool.getConnection();
 
     // Get current local system time
@@ -212,7 +217,7 @@ export async function POST(request: Request) {
       ? formatDateForMySQL(body.date)
       : now;
 
-    const [result] = await connection.query<mysql.ResultSetHeader>(
+    const [result] = await connection!.query<mysql.ResultSetHeader>(
       `INSERT INTO receipts (
         receipt_number, date, customer_name, customer_contact, 
         customer_country_code, payment_type, payment_status, 

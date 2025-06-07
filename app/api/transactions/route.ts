@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
-import { pool } from "@/lib/database";
+import { getPool } from "@/lib/database";
 import { verifyJwt } from "@/lib/auth";
 
 interface Transaction {
@@ -36,10 +36,11 @@ export async function GET(request: Request) {
 
   try {
     const { userId } = await verifyToken(request);
+    const pool = await getPool();
     connection = await pool.getConnection();
 
     // Get all transactions with receipt number if available
-    const [transactionRows] = await connection.query<mysql.RowDataPacket[]>(
+    const [transactionRows] = await connection!.query<mysql.RowDataPacket[]>(
       `SELECT 
         t.id, 
         t.particulars, 
@@ -74,7 +75,7 @@ export async function GET(request: Request) {
     });
 
     // Calculate total due balance from unpaid due records
-    const [dueRows] = await connection.query<mysql.RowDataPacket[]>(
+    const [dueRows] = await connection!.query<mysql.RowDataPacket[]>(
       `SELECT COALESCE(SUM(amount_due), 0) as total_due
        FROM due_records
        WHERE user_id = ? AND is_paid = FALSE`,
@@ -109,7 +110,13 @@ export async function GET(request: Request) {
       }
     );
   } finally {
-    if (connection) await connection.release();
+    if (connection) {
+      try {
+        await connection.release();
+      } catch (e: unknown) {
+        // ignore
+      }
+    }
   }
 }
 
@@ -142,10 +149,11 @@ export async function POST(request: Request) {
       );
     }
 
+    const pool = await getPool();
     connection = await pool.getConnection();
 
     // Insert the new transaction
-    const [result] = await connection.query<mysql.ResultSetHeader>(
+    const [result] = await connection!.query<mysql.ResultSetHeader>(
       `INSERT INTO account_transactions 
        (particulars, amount, type, user_id, created_at)
        VALUES (?, ?, ?, ?, NOW())`,
@@ -157,7 +165,7 @@ export async function POST(request: Request) {
     }
 
     // Return the created transaction
-    const [newTransaction] = await connection.query<mysql.RowDataPacket[]>(
+    const [newTransaction] = await connection!.query<mysql.RowDataPacket[]>(
       `SELECT 
         t.id, 
         t.particulars, 
@@ -201,6 +209,12 @@ export async function POST(request: Request) {
       }
     );
   } finally {
-    if (connection) await connection.release();
+    if (connection) {
+      try {
+        await connection.release();
+      } catch (e: unknown) {
+        // ignore
+      }
+    }
   }
 }

@@ -221,9 +221,7 @@ export default function Home() {
                         src={getProfilePhotoUrl(user.profilePhoto)}
                         alt={user.name}
                         className="h-10 w-10 rounded-full object-cover cursor-pointer"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
+                        onClick={() => {
                           setIsImageViewerOpen(true)
                         }}
                       />

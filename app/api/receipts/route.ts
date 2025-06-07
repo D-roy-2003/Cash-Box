@@ -39,6 +39,28 @@ interface JwtPayload {
   [key: string]: any;
 }
 
+// New helper function to format date for MySQL DATE column (YYYY-MM-DD)
+function formatDateOnlyForMySQL(date: Date | string): string {
+  let d: Date;
+  
+  if (typeof date === 'string') {
+    if (date.includes('T')) {
+      d = new Date(date);
+    } else {
+      d = new Date(date + 'T00:00:00'); // Assuming local timezone input if no T
+    }
+  } else {
+    d = new Date(date);
+  }
+
+  if (isNaN(d.getTime())) {
+    throw new Error(`Invalid date format: ${date}`);
+  }
+
+  const pad = (num: number) => num.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function formatLocalDateForMySQL(date: Date | string): string {
   let d: Date;
   
@@ -133,28 +155,36 @@ async function createReceipt(
     total: body.total
   });
 
+  // Calculate subtotal from items
+  const calculatedSubtotal = body.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  // Use gstAmount from body for total_tax, default to 0 if not provided
+  const calculatedTotalTax = body.gstAmount ?? 0;
+  const calculatedTotalDiscount = 0;
+
   try {
     const [result] = await connection.query<mysql.ResultSetHeader>(
       `INSERT INTO receipts (
         receipt_number, date, customer_name, customer_contact, customer_country_code,
-        payment_type, payment_status, notes, total, due_total, user_id, created_at,
-        gst_percentage, gst_amount
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        payment_type, payment_status, notes,
+        subtotal, total_tax, total_discount, -- Added these three columns
+        total, due_total, user_id, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         body.receiptNumber,
-        formatLocalDateForMySQL(body.date),
+        formatDateOnlyForMySQL(body.date),
         body.customerName,
         body.customerContact,
         body.customerCountryCode,
         body.paymentType.toLowerCase(),
         body.paymentStatus.toLowerCase(),
         body.notes || null,
+        calculatedSubtotal, // Value for subtotal
+        calculatedTotalTax, // Value for total_tax
+        calculatedTotalDiscount, // Value for total_discount
         body.total,
         body.dueTotal,
         userId,
-        formatLocalDateForMySQL(new Date()),
-        body.gstPercentage || null,
-        body.gstAmount || null
+        formatLocalDateForMySQL(new Date())
       ]
     );
 
@@ -162,7 +192,7 @@ async function createReceipt(
     return result.insertId;
   } catch (error) {
     console.error("Error creating receipt:", error);
-    throw new Error("Failed to create receipt record");
+    throw error; // Re-throw the original error to get more details
   }
 }
 
@@ -346,28 +376,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
+    const pool = await getPool();
     connection = await pool.getConnection();
     console.log("Database connection acquired");
     
-    await connection.beginTransaction();
+    await connection!.beginTransaction();
     console.log("Transaction started");
 
-    const receiptId = await createReceipt(connection, body, userId);
-    await processReceiptItems(connection, receiptId, body.items);
+    const receiptId = await createReceipt(connection!, body, userId);
+    await processReceiptItems(connection!, receiptId, body.items);
 
     if (body.paymentDetails) {
-      await processPaymentDetails(connection, receiptId, body.paymentDetails);
+      await processPaymentDetails(connection!, receiptId, body.paymentDetails);
     }
 
     if (body.paymentStatus !== "full" && body.dueTotal > 0) {
-      await processDueRecords(connection, receiptId, body, userId);
+      await processDueRecords(connection!, receiptId, body, userId);
     }
 
-    if (body.total > 0) {
-      await processAccountTransaction(connection, receiptId, body, userId);
-    }
-
-    await connection.commit();
+    await connection!.commit();
     console.log("Transaction committed successfully");
 
     return NextResponse.json({
@@ -382,7 +409,7 @@ export async function POST(request: Request) {
       try {
         await connection.rollback();
         console.log("Transaction rolled back");
-      } catch (rollbackError) {
+      } catch (rollbackError: unknown) {
         console.error("Rollback failed:", rollbackError);
       }
     }
@@ -408,8 +435,57 @@ export async function POST(request: Request) {
     }, { status: 500 });
   } finally {
     if (connection) {
-      await connection.release();
-      console.log("Database connection released");
+      try {
+        await connection.release();
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+}
+
+export async function GET(request: Request) {
+  // Authenticate user
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const token = authHeader.split(" ")[1];
+  let connection: mysql.PoolConnection | undefined;
+  try {
+    const decoded = await verifyJwt(token);
+    if (!decoded?.userId) {
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    }
+    const userId = String(decoded.userId);
+    const pool = await getPool();
+    connection = await pool.getConnection();
+    // Fetch the latest receipt number for this user
+    const [rows] = await connection!.query<mysql.RowDataPacket[]>(
+      `SELECT receipt_number FROM receipts WHERE user_id = ? ORDER BY id DESC LIMIT 1`,
+      [userId]
+    );
+    let nextNumber = 1;
+    let prefix = "RCPT";
+    if (rows.length > 0 && rows[0].receipt_number) {
+      // Extract numeric part from the last receipt number
+      const match = rows[0].receipt_number.match(/(\d+)$/);
+      if (match) {
+        nextNumber = parseInt(match[1], 10) + 1;
+      }
+    }
+    const receiptNumber = `${prefix}${userId}-${nextNumber.toString().padStart(4, "0")}`;
+    return NextResponse.json({ receiptNumber });
+  } catch (error) {
+    console.error("Error generating receipt number:", error);
+    return NextResponse.json({ error: "Failed to generate receipt number" }, { status: 500 });
+  } finally {
+    if (connection) {
+      try {
+        await connection.release();
+      } catch (e) {
+        // ignore
+      }
     }
   }
 }

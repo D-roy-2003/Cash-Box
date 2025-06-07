@@ -36,6 +36,7 @@ interface ReceiptData {
     contact: string;
     countryCode?: string;
   };
+  totalTax: number;
 }
 
 export default function ReceiptPreview() {
@@ -147,11 +148,20 @@ export default function ReceiptPreview() {
     }
   };
 
-  const calculateTotalItemValue = () => {
+  const calculateSubtotal = () => {
     if (!receiptData) return 0;
     return receiptData.items.reduce((total, item) => {
-      return total + item.quantity * item.price;
+      return total + ensureNumber(item.quantity) * ensureNumber(item.price);
     }, 0);
+  };
+
+  const calculateTotalGST = () => {
+    if (!receiptData) return 0;
+    return ensureNumber(receiptData.totalTax);
+  };
+
+  const calculateTotalAmount = () => {
+    return calculateSubtotal() + calculateTotalGST();
   };
 
   const calculateTotalAdvanceAmount = () => {
@@ -159,6 +169,13 @@ export default function ReceiptPreview() {
     return receiptData.items.reduce((total, item) => {
       return total + ensureNumber(item.advanceAmount);
     }, 0);
+  };
+
+  const calculateAverageGSTRate = () => {
+    if (!receiptData || calculateSubtotal() === 0) return 0;
+    const subtotal = calculateSubtotal();
+    const totalTax = calculateTotalGST();
+    return ensureNumber((totalTax / subtotal) * 100);
   };
 
   if (loading) {
@@ -358,36 +375,43 @@ export default function ReceiptPreview() {
             </tbody>
           </table>
 
-          <div className="mt-4 text-right">
+          <div className="mt-4 text-right space-y-1">
+            <div className="text-base">
+              Subtotal: ₹{calculateSubtotal().toFixed(2)}
+            </div>
+            <div className="text-base">
+              GST @ {calculateAverageGSTRate().toFixed(2)}%: ₹{calculateTotalGST().toFixed(2)}
+            </div>
+            
             {receiptData.paymentStatus === "full" && (
-              <div className="text-lg font-bold print:text-base">
-                Total: ₹{ensureNumber(receiptData.total).toFixed(2)}
+              <div className="text-lg font-bold print:text-base mt-2">
+                Total: ₹{calculateSubtotal() + calculateTotalGST()}
               </div>
             )}
 
             {receiptData.paymentStatus === "advance" && (
               <>
-                <div className="text-lg font-bold print:text-base">
-                  Total Value: ₹{calculateTotalItemValue().toFixed(2)}
+                <div className="text-lg font-bold print:text-base mt-2">
+                  Total Amount: ₹{calculateSubtotal() + calculateTotalGST()}
                 </div>
-                <div className="text-base mt-1">
+                <div className="text-base">
                   Advance Paid: ₹{calculateTotalAdvanceAmount().toFixed(2)}
                 </div>
                 <div className="text-base font-bold text-red-500 mt-1 print:text-black">
-                  Balance Due: ₹{ensureNumber(receiptData.dueTotal).toFixed(2)}
+                  Balance Due: ₹{(calculateSubtotal() + calculateTotalGST() - calculateTotalAdvanceAmount()).toFixed(2)}
                 </div>
               </>
             )}
 
             {receiptData.paymentStatus === "due" && (
               <>
-                <div className="text-lg font-bold print:text-base">
-                  Total Value: ₹{calculateTotalItemValue().toFixed(2)}
+                <div className="text-lg font-bold print:text-base mt-2">
+                  Total Amount: ₹{calculateSubtotal() + calculateTotalGST()}
                 </div>
-                <div className="text-base mt-1">
+                <div className="text-base">
                   Already Paid: ₹
                   {(
-                    calculateTotalItemValue() -
+                    (calculateSubtotal() + calculateTotalGST()) -
                     ensureNumber(receiptData.dueTotal)
                   ).toFixed(2)}
                 </div>
@@ -415,7 +439,9 @@ export default function ReceiptPreview() {
                 Due Payment Notice
               </p>
               <p className="text-sm text-red-600 print:text-black">
-                A balance of ₹{ensureNumber(receiptData.dueTotal).toFixed(2)} is
+                A balance of ₹{(receiptData.paymentStatus === "advance" 
+                  ? (calculateSubtotal() + calculateTotalGST() - calculateTotalAdvanceAmount()).toFixed(2)
+                  : ensureNumber(receiptData.dueTotal).toFixed(2))} is
                 due for this transaction. Please ensure timely payment to avoid
                 any inconvenience.
               </p>
