@@ -41,6 +41,7 @@ const ReceiptSchema = z.object({
   customerCountryCode: z.string().optional(),
   paymentType: z.enum(["cash", "online"]),
   paymentStatus: z.enum(["full", "advance", "due"]),
+  paymentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format").optional(),
   notes: z.string().optional(),
   total: z.number().min(0),
   dueTotal: z.number().min(0),
@@ -68,6 +69,7 @@ export default function CreateReceipt() {
     customerCountryCode: "+91",
     paymentType: "cash" as "cash" | "online",
     paymentStatus: "full" as "full" | "advance" | "due",
+    paymentDate: format(new Date(), "yyyy-MM-dd"),
     notes: "",
     items: [{ description: "", quantity: 0, price: 0 }] as ReceiptItem[],
     total: 0,
@@ -310,6 +312,7 @@ export default function CreateReceipt() {
         customerCountryCode: receiptData.customerCountryCode,
         paymentType: receiptData.paymentStatus === "due" ? "cash" : receiptData.paymentType,
         paymentStatus: receiptData.paymentStatus,
+        paymentDate: receiptData.paymentDate,
         notes: receiptData.notes || undefined,
         total: receiptData.total,
         dueTotal: receiptData.dueTotal,
@@ -471,7 +474,8 @@ export default function CreateReceipt() {
                         paymentStatus: newStatus,
                         paymentType: newStatus === "due" ? "cash" : prev.paymentType,
                         gstPercentage: newStatus === "due" ? null : prev.gstPercentage,
-                        gstAmount: newStatus === "due" ? 0 : prev.gstAmount
+                        gstAmount: newStatus === "due" ? 0 : prev.gstAmount,
+                        paymentDate: newStatus === "due" ? format(new Date(), "yyyy-MM-dd") : prev.paymentDate
                       }));
                     }}
                     required
@@ -486,6 +490,24 @@ export default function CreateReceipt() {
                     </SelectContent>
                   </Select>
               </div>
+
+              {receiptData.paymentStatus === "due" && (
+                <div className="space-y-2">
+                  <Label htmlFor="paymentDate">Expected Payment Date</Label>
+                  <Input
+                    id="paymentDate"
+                    name="paymentDate"
+                    type="date"
+                    value={receiptData.paymentDate}
+                    onChange={handleChange}
+                    min={format(new Date(), "yyyy-MM-dd")}
+                    required
+                  />
+                  {errors.paymentDate && (
+                    <p className="text-xs text-red-500">{errors.paymentDate}</p>
+                  )}
+                </div>
+              )}
             </div>
 
             {receiptData.paymentType === "online" && receiptData.paymentStatus !== "due" && (

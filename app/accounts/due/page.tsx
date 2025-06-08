@@ -77,8 +77,14 @@ export default function DuePage() {
         throw new Error(data.error);
       }
 
-      // Data is already properly formatted from the API
-      setDueRecords(Array.isArray(data) ? data : []);
+      // Sort the records by createdAt in descending order (newest first)
+      const sortedRecords = Array.isArray(data) ? data.sort((a, b) => {
+        const dateA = new Date(a.createdAt).getTime();
+        const dateB = new Date(b.createdAt).getTime();
+        return dateB - dateA;
+      }) : [];
+
+      setDueRecords(sortedRecords);
     } catch (error) {
       console.error("Fetch error:", error);
       toast.error("Failed to load due records");
@@ -150,8 +156,13 @@ export default function DuePage() {
       if (!dateString) return false;
       const dueDate = new Date(dateString);
       const today = new Date();
+      
+      // Set both dates to start of day for comparison
+      dueDate.setHours(0, 0, 0, 0);
       today.setHours(0, 0, 0, 0);
-      return dueDate < today;
+      
+      // If due date is today or before today, it's overdue
+      return dueDate <= today;
     } catch (error) {
       return false;
     }

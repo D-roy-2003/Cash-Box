@@ -25,6 +25,7 @@ interface ReceiptBody {
   customerCountryCode: string;
   paymentType: 'cash' | 'online';
   paymentStatus: 'full' | 'advance' | 'due';
+  paymentDate?: string;
   notes?: string;
   total: number;
   dueTotal: number;
@@ -97,6 +98,24 @@ function validateReceiptBody(body: ReceiptBody): string | null {
   const validStatuses = ['full', 'advance', 'due'];
   if (!body.paymentStatus || !validStatuses.includes(body.paymentStatus.toLowerCase())) {
     return `Payment status must be one of: ${validStatuses.join(', ')}`;
+  }
+
+  if (body.paymentStatus === 'due' && !body.paymentDate) {
+    return "Expected payment date is required for due payments";
+  }
+
+  if (body.paymentDate) {
+    const paymentDate = new Date(body.paymentDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (isNaN(paymentDate.getTime())) {
+      return "Invalid payment date format";
+    }
+    
+    if (paymentDate < today) {
+      return "Payment date cannot be in the past";
+    }
   }
 
   if (!Array.isArray(body.items) || body.items.length === 0) {
@@ -273,8 +292,15 @@ async function processDueRecords(
   try {
     const productOrdered = body.items.map((i) => i.description).join(", ");
     const totalQuantity = body.items.reduce((sum, i) => sum + i.quantity, 0);
-    const expectedPaymentDate = new Date();
-    expectedPaymentDate.setDate(expectedPaymentDate.getDate() + 7);
+    
+    // Use the paymentDate from the form, or default to 7 days from now if not provided
+    const expectedPaymentDate = body.paymentDate ? 
+      new Date(body.paymentDate) : 
+      (() => {
+        const date = new Date();
+        date.setDate(date.getDate() + 7);
+        return date;
+      })();
 
     await connection.query(
       `INSERT INTO due_records (
@@ -289,7 +315,7 @@ async function processDueRecords(
         productOrdered,
         totalQuantity,
         body.dueTotal,
-        expectedPaymentDate.toISOString().split("T")[0],
+        formatDateOnlyForMySQL(expectedPaymentDate),
         userId,
         body.receiptNumber,
       ]

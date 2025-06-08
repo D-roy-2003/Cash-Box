@@ -99,22 +99,42 @@ export default function AccountsPage() {
   }, [])
 
   useEffect(() => {
-    if (user) {
-      const overduePayments = checkOverduePayments();
-      setNotifications(overduePayments);
+    const fetchNotifications = async () => {
+      if (!user) return;
 
-      const lastReadTime = localStorage.getItem("notificationsLastRead");
-      if (lastReadTime) {
-        const lastRead = new Date(lastReadTime);
-        const hasNew = overduePayments.some((notification: any) => {
-          const createdAt = new Date(notification.createdAt);
-          return createdAt > lastRead;
+      try {
+        const userJSON = localStorage.getItem("currentUser");
+        if (!userJSON) return;
+
+        const userData = JSON.parse(userJSON);
+        const response = await fetch("/api/notifications", {
+          headers: { Authorization: `Bearer ${userData.token}` },
         });
-        setHasUnreadNotifications(hasNew || overduePayments.length > 0);
-      } else if (overduePayments.length > 0) {
-        setHasUnreadNotifications(true);
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch notifications");
+        }
+
+        const notifications = await response.json();
+        setNotifications(notifications);
+
+        const lastReadTime = localStorage.getItem("notificationsLastRead");
+        if (lastReadTime) {
+          const lastRead = new Date(lastReadTime);
+          const hasNew = notifications.some((notification: any) => {
+            const createdAt = new Date(notification.createdAt);
+            return createdAt > lastRead;
+          });
+          setHasUnreadNotifications(hasNew);
+        } else {
+          setHasUnreadNotifications(notifications.length > 0);
+        }
+      } catch (error) {
+        console.error("Error fetching notifications:", error);
       }
-    }
+    };
+
+    fetchNotifications();
   }, [user]);
 
   useEffect(() => {
@@ -384,19 +404,6 @@ export default function AccountsPage() {
     router.push("/login");
   };
 
-  const checkOverduePayments = () => {
-    const dueRecordsJSON = localStorage.getItem("dueRecords");
-    if (!dueRecordsJSON) return [];
-
-    const dueRecords = JSON.parse(dueRecordsJSON);
-    const today = new Date();
-
-    return dueRecords.filter((record: any) => {
-      const dueDate = new Date(record.expectedPaymentDate);
-      return !record.isPaid && dueDate < today;
-    });
-  };
-
   const handleNotificationClick = () => {
     setIsNotificationsOpen(!isNotificationsOpen);
     if (hasUnreadNotifications) {
@@ -458,7 +465,8 @@ export default function AccountsPage() {
                                 Payment Overdue: {notification.customerName}
                               </p>
                               <p className="text-xs text-gray-500">
-                                ₹{notification.amountDue.toFixed(2)} for {notification.productOrdered}
+                                {console.log('notification.amountDue:', notification.amountDue, 'Type:', typeof notification.amountDue)}
+                                ₹{(Number(notification.amountDue) || 0).toFixed(2)} for {notification.productOrdered}
                               </p>
                               <p className="text-xs text-red-500">
                                 Due date: {new Date(notification.expectedPaymentDate).toLocaleDateString()}
