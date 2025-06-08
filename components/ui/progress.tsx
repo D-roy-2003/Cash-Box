@@ -19,6 +19,10 @@ const Progress = React.forwardRef<
       className="h-full w-full flex-1 bg-primary transition-all"
       style={{ transform: `translateX(-${100 - (value || 0)}%)` }}
     />
+    <div className="flex items-center justify-between">
+      <span className="text-sm font-medium">Progress</span>
+      <span className="text-sm font-medium">{value}%</span>
+    </div>
   </ProgressPrimitive.Root>
 ));
 Progress.displayName = ProgressPrimitive.Root.displayName;

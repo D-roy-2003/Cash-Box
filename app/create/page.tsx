@@ -388,7 +388,7 @@ export default function CreateReceipt() {
                   className="bg-gray-50"
                 />
                 {errors.receiptNumber && (
-                  <p className="text-xs text-red-500">{errors.receiptNumber}</p>
+                  <div className="text-xs text-red-500">{errors.receiptNumber}</div>
                 )}
               </div>
 
@@ -403,7 +403,7 @@ export default function CreateReceipt() {
                   required
                 />
                 {errors.date && (
-                  <p className="text-xs text-red-500">{errors.date}</p>
+                  <div className="text-xs text-red-500">{errors.date}</div>
                 )}
               </div>
 
@@ -500,7 +500,7 @@ export default function CreateReceipt() {
                     required
                   />
                   {errors.paymentDate && (
-                    <p className="text-xs text-red-500">{errors.paymentDate}</p>
+                    <div className="text-xs text-red-500">{errors.paymentDate}</div>
                   )}
                 </div>
               )}
@@ -516,9 +516,9 @@ export default function CreateReceipt() {
                   placeholder="Enter phone number"
                 />
                 {errors["paymentDetails.phoneNumber"] && (
-                  <p className="text-xs text-red-500">
+                  <div className="text-xs text-red-500">
                     {errors["paymentDetails.phoneNumber"]}
-                  </p>
+                  </div>
                 )}
               </div>
             )}
@@ -534,7 +534,7 @@ export default function CreateReceipt() {
                 required
               />
               {errors.customerName && (
-                <p className="text-xs text-red-500">{errors.customerName}</p>
+                <div className="text-xs text-red-500">{errors.customerName}</div>
               )}
             </div>
 
@@ -547,7 +547,7 @@ export default function CreateReceipt() {
                 placeholder="Enter customer phone number"
               />
               {errors.customerContact && (
-                <p className="text-xs text-red-500">{errors.customerContact}</p>
+                <div className="text-xs text-red-500">{errors.customerContact}</div>
               )}
             </div>
 
@@ -585,9 +585,9 @@ export default function CreateReceipt() {
                       required
                     />
                     {errors[`items.${index}.description`] && (
-                      <p className="text-xs text-red-500">
+                      <div className="text-xs text-red-500">
                         {errors[`items.${index}.description`]}
-                      </p>
+                      </div>
                     )}
                   </div>
 
@@ -608,9 +608,9 @@ export default function CreateReceipt() {
                       }}
                     />
                     {errors[`items.${index}.quantity`] && (
-                      <p className="text-xs text-red-500">
+                      <div className="text-xs text-red-500">
                         {errors[`items.${index}.quantity`]}
-                      </p>
+                      </div>
                     )}
                   </div>
 
@@ -632,9 +632,9 @@ export default function CreateReceipt() {
                       }}
                     />
                     {errors[`items.${index}.price`] && (
-                      <p className="text-xs text-red-500">
+                      <div className="text-xs text-red-500">
                         {errors[`items.${index}.price`]}
-                      </p>
+                      </div>
                     )}
                   </div>
 
@@ -655,9 +655,9 @@ export default function CreateReceipt() {
                         }
                       />
                       {errors[`items.${index}.advanceAmount`] && (
-                        <p className="text-xs text-red-500">
+                        <div className="text-xs text-red-500">
                           {errors[`items.${index}.advanceAmount`]}
-                        </p>
+                        </div>
                       )}
                     </div>
                   )}
@@ -677,9 +677,9 @@ export default function CreateReceipt() {
                         }
                       />
                       {errors[`items.${index}.dueAmount`] && (
-                        <p className="text-xs text-red-500">
+                        <div className="text-xs text-red-500">
                           {errors[`items.${index}.dueAmount`]}
-                        </p>
+                        </div>
                       )}
                     </div>
                   )}

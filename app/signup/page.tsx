@@ -229,11 +229,16 @@ export default function SignupPage() {
                   onChange={handleChange}
                   required
                 />
-                <p className="text-xs text-gray-500">
-                  Password must be at least 8 characters long and contain at
-                  least one uppercase letter, one lowercase letter, one digit,
-                  and one special character.
-                </p>
+                <div className="text-xs text-gray-500">
+                  <p>Password must contain:</p>
+                  <ul className="list-disc list-inside">
+                    <li>At least 8 characters</li>
+                    <li>At least one uppercase letter</li>
+                    <li>At least one lowercase letter</li>
+                    <li>At least one digit</li>
+                    <li>At least one special character</li>
+                  </ul>
+                </div>
               </div>
 
               <div className="space-y-2">

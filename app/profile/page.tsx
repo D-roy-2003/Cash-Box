@@ -772,9 +772,9 @@ export default function ProfilePage() {
                     {gstError && (
                       <p className="text-sm text-red-600">{gstError}</p>
                     )}
-                    <p className="text-sm text-gray-500">
-                      Optional - Must be exactly 15 alphanumeric characters
-                    </p>
+                    <div className="text-sm text-gray-500">
+                      <p>GST number must be exactly 15 alphanumeric characters</p>
+                    </div>
                   </div>
 
                   <Button type="submit" disabled={loading || isUploading} className="w-full">
@@ -819,16 +819,17 @@ export default function ProfilePage() {
                         placeholder="Enter your new password"
                         required
                       />
-                      <p className="text-sm text-gray-500">
-                        Password must contain:
-                        <ul className="list-disc list-inside">
-                          <li>At least 8 characters</li>
-                          <li>At least one uppercase letter</li>
-                          <li>At least one lowercase letter</li>
-                          <li>At least one number</li>
-                          <li>At least one special character</li>
-                        </ul>
-                      </p>
+                    </div>
+                    
+                    <div className="text-sm text-gray-500">
+                      <p>Password must contain:</p>
+                      <ul className="list-disc list-inside">
+                        <li>At least 8 characters</li>
+                        <li>At least one uppercase letter</li>
+                        <li>At least one lowercase letter</li>
+                        <li>At least one number</li>
+                        <li>At least one special character</li>
+                      </ul>
                     </div>
                     
                     <div className="space-y-2">

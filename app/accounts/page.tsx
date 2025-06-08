@@ -586,14 +586,16 @@ export default function AccountsPage() {
                   <p className="text-3xl font-bold text-red-600">
                     -₹{totalDueBalance.toFixed(2)}
                   </p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    <Link
-                      href="/accounts/due"
-                      className="underline hover:text-gray-700"
-                    >
-                      Manage due payments
-                    </Link>
-                  </p>
+                  <div className="text-sm text-gray-500 mt-1">
+                    <p>
+                      <Link
+                        href="/accounts/due"
+                        className="underline hover:text-gray-700"
+                      >
+                        Manage due payments
+                      </Link>
+                    </p>
+                  </div>
                   {totalDueBalance > 0 && (
                     <p className="text-xs text-gray-400 mt-1">
                       Synced with due records

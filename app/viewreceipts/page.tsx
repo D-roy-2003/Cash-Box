@@ -141,7 +141,7 @@ export default function ViewReceipts() {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="text-center">
-          <p className="text-lg">Loading your receipts...</p>
+          <div className="text-lg">Loading your receipts...</div>
         </div>
       </div>
     )
@@ -159,7 +159,7 @@ export default function ViewReceipts() {
           </Link>
         </div>
         <div className="text-center py-12">
-          <p className="text-red-500 mb-4">Error: {error}</p>
+          <div className="text-red-500 mb-4">Error: {error}</div>
           <Button onClick={() => window.location.reload()}>Try Again</Button>
         </div>
       </div>
@@ -208,9 +208,9 @@ export default function ViewReceipts() {
               <X className="h-4 w-4" />
             </button>
           )}
-          <p className="text-xs text-gray-500 mt-1">
+          <div className="text-xs text-gray-500 mt-1">
             Search by receipt #, name, amount, or status
-          </p>
+          </div>
         </div>
         
         <DropdownMenu>
@@ -238,11 +238,11 @@ export default function ViewReceipts() {
 
       {filteredReceipts.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12">
-          <p className="text-lg text-gray-500 mb-4">
+          <div className="text-lg text-gray-500 mb-4">
             {searchTerm || statusFilter !== "all" 
               ? "No matching receipts found" 
               : "No receipts found"}
-          </p>
+          </div>
           <Link href="/create">
             <Button>Create Your First Receipt</Button>
           </Link>

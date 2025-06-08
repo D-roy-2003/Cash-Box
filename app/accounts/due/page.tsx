@@ -364,13 +364,13 @@ export default function DuePage() {
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <h3 className="font-medium">{record.customerName}</h3>
-                        <p className="text-sm text-gray-600">
+                        <div className="text-sm text-gray-600">
                           {record.productOrdered}
-                        </p>
+                        </div>
                         {record.receiptNumber && (
-                          <p className="text-xs text-gray-400">
+                          <div className="text-xs text-gray-400">
                             Receipt: #{record.receiptNumber}
-                          </p>
+                          </div>
                         )}
                       </div>
                       <span className="font-bold text-red-600">

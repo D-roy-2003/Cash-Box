@@ -264,21 +264,21 @@ export default function ReceiptPreview() {
           <div>
             <h2 className="text-lg font-semibold mb-2">Receipt Details</h2>
             <div className="space-y-1">
-              <p>
+              <div>
                 <span className="font-medium">Date: </span>
                 {formatDate(receiptData.date)}
-              </p>
+              </div>
               {(receiptData.paymentStatus === "full" ||
                 receiptData.paymentStatus === "advance") && (
-                <p>
+                <div>
                   <span className="font-medium">Payment Method: </span>
                   {receiptData.paymentType === "mobile"
                     ? "Online"
                     : receiptData.paymentType.charAt(0).toUpperCase() +
                       receiptData.paymentType.slice(1)}
-                </p>
+                </div>
               )}
-              <p>
+              <div>
                 <span className="font-medium">Payment Status: </span>
                 {receiptData.paymentStatus === "full"
                   ? "Full Payment"
@@ -289,28 +289,28 @@ export default function ReceiptPreview() {
                       <span className="px-2 py-1 rounded-full bg-green-100 text-green-800 font-semibold text-xs ml-1">Due Paid</span>
                     )
                   : "Due Payment"}
-              </p>
+              </div>
               {receiptData.paymentDetails?.phoneNumber &&
                 receiptData.paymentStatus !== "due" && (
-                  <p>
-                    <span className="font-medium">Phone Number: </span>
-                    XXXXXXX{receiptData.paymentDetails.phoneNumber.slice(-3)}
-                  </p>
-                )}
+                <div>
+                  <span className="font-medium">Phone Number: </span>
+                  XXXXXXX{receiptData.paymentDetails.phoneNumber.slice(-3)}
+                </div>
+              )}
             </div>
           </div>
           <div>
             <h2 className="text-lg font-semibold mb-2">Customer Details</h2>
             <div className="space-y-1">
-              <p>
+              <div>
                 <span className="font-medium">Name: </span>
                 {receiptData.customerName}
-              </p>
+              </div>
               {receiptData.customerContact && (
-                <p>
+                <div>
                   <span className="font-medium">Contact: </span>
                   {receiptData.customerContact}
-                </p>
+                </div>
               )}
             </div>
           </div>

@@ -144,15 +144,15 @@ const handleSubmit = async (e: React.FormEvent) => {
                   onChange={(e) => setNewPassword(e.target.value)}
                   required
                 />
-                <p className="text-sm text-gray-500 mt-1">
-                  Password must be at least 8 characters long and contain:
+                <div className="text-sm text-gray-500 mt-1">
+                  <p>Password must be at least 8 characters long and contain:</p>
                   <ul className="list-disc pl-5 mt-1">
                     <li>One uppercase letter</li>
                     <li>One lowercase letter</li>
                     <li>One number</li>
                     <li>One special character</li>
                   </ul>
-                </p>
+                </div>
               </div>
 
               <Button type="submit" className="w-full" disabled={loading}>
