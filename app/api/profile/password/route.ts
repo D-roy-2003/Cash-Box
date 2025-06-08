@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { pool } from "@/lib/database";
+import { getPool } from "@/lib/database";
 import { verifyJwt } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 import { initializeDatabase } from "@/lib/database";
+import mysql from "mysql2/promise";
 
 export async function PUT(request: Request) {
   await initializeDatabase();
@@ -24,7 +25,17 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
-    const { currentPassword, newPassword } = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (e) {
+      return NextResponse.json(
+        { error: "Invalid JSON in request body" },
+        { status: 400 }
+      );
+    }
+
+    const { currentPassword, newPassword } = body;
 
     if (!currentPassword || !newPassword) {
       return NextResponse.json(
@@ -33,10 +44,18 @@ export async function PUT(request: Request) {
       );
     }
 
+    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+      return NextResponse.json(
+        { error: "Passwords must be strings" },
+        { status: 400 }
+      );
+    }
+
+    const pool = await getPool();
     connection = await pool.getConnection();
 
     // Get user's current password hash
-    const [users]: any = await connection.query(
+    const [users]: any = await connection!.query(
       `SELECT password FROM users WHERE id = ? LIMIT 1`,
       [decoded.userId]
     );
@@ -63,7 +82,7 @@ export async function PUT(request: Request) {
     const hashedPassword = await bcrypt.hash(newPassword, 12);
 
     // Update password
-    await connection.query(
+    await connection!.query(
       `UPDATE users SET password = ? WHERE id = ?`,
       [hashedPassword, decoded.userId]
     );

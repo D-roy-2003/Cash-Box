@@ -3,21 +3,14 @@ import { getPool } from "@/lib/database";
 import { verifyJwt } from "@/lib/auth";
 import type { PoolConnection } from "mysql2/promise";
 
-// Extracted helper to verify token
 async function verifyToken(request: Request): Promise<{ userId: number }> {
   const authHeader = request.headers.get("authorization");
-
-  if (!authHeader?.startsWith("Bearer ")) {
-    throw new Error("Unauthorized");
-  }
-
+  if (!authHeader?.startsWith("Bearer ")) throw new Error("Unauthorized");
+  
   const token = authHeader.split(" ")[1];
   const decoded = await verifyJwt(token);
-
-  if (!decoded?.userId) {
-    throw new Error("Invalid token");
-  }
-
+  if (!decoded?.userId) throw new Error("Invalid token");
+  
   return { userId: decoded.userId };
 }
 
@@ -26,37 +19,32 @@ export async function GET(request: Request) {
 
   try {
     const { userId } = await verifyToken(request);
-  
-    const poolInstance = await getPool();
-    connection = await poolInstance.getConnection();
-  
-    if (!connection) {
-      throw new Error("Failed to establish database connection");
-    }
-  
-    const [rows] = await connection.query(
-      `
+    const pool = await getPool();
+    connection = await pool.getConnection();
+
+    // Query with explicit type casting for numeric fields
+    const [rows] = await connection!.execute(`
       SELECT 
         id,
         receipt_number AS receiptNumber,
         date,
         customer_name AS customerName,
-        total,
+        CAST(total AS DECIMAL(10,2)) AS total,
         payment_status AS paymentStatus
       FROM receipts
       WHERE user_id = ?
       ORDER BY date DESC
-      `,
-      [userId]
-    );
-  
+    `, [userId]);
+
+    // Simple response without additional processing
     return NextResponse.json(rows);
+    
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Database error" },
       { status: 500 }
     );
   } finally {
-    connection?.release(); // ✅ No more warning
+    connection?.release();
   }
 }

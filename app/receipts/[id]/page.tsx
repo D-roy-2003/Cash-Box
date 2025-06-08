@@ -35,6 +35,7 @@ interface ReceiptData {
     address: string;
     contact: string;
     countryCode?: string;
+    gstNumber?: string;
   };
   totalTax: number;
 }
@@ -242,6 +243,11 @@ export default function ReceiptPreview() {
           {receiptData.storeInfo?.address && (
             <p className="text-gray-600 text-sm mb-1">
               {receiptData.storeInfo.address}
+            </p>
+          )}
+          {receiptData.storeInfo?.gstNumber && (
+            <p className="text-gray-600 text-sm mb-1">
+              GST NUMBER: {receiptData.storeInfo.gstNumber}
             </p>
           )}
           {receiptData.storeInfo?.contact && (

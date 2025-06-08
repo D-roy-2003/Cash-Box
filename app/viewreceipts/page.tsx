@@ -56,10 +56,29 @@ export default function ViewReceipts() {
         }
         
         const data = await response.json()
-        const processedReceipts = data.map((receipt: Receipt) => ({
-          ...receipt,
-          total: typeof receipt.total === 'string' ? parseFloat(receipt.total) : receipt.total
-        }))
+        
+        // Process receipts with proper total amount handling
+        const processedReceipts = data.map((receipt: Receipt) => {
+          let totalValue = receipt.total;
+          
+          // If it's a string, parse it carefully
+          if (typeof receipt.total === 'string') {
+            // Remove any currency symbols or commas
+            const cleaned = receipt.total.replace(/[^0-9.-]/g, '');
+            totalValue = parseFloat(cleaned);
+            
+            // If parsing fails, default to 0
+            if (isNaN(totalValue as number)) {
+              totalValue = 0;
+            }
+          }
+          
+          return {
+            ...receipt,
+            total: totalValue
+          };
+        });
+        
         setReceipts(processedReceipts)
       } catch (err) {
         console.error("Error:", err)
@@ -98,8 +117,7 @@ export default function ViewReceipts() {
       ]
 
       const matchesSearch = fieldsToSearch.some(field => 
-        field.toLowerCase().includes(lowerCaseSearchTerm)
-      )
+        field.toLowerCase().includes(lowerCaseSearchTerm))
       
       const matchesStatus = 
         statusFilter === "all" || receipt.paymentStatus === statusFilter
@@ -109,7 +127,13 @@ export default function ViewReceipts() {
   }, [receipts, searchTerm, statusFilter])
 
   const formatCurrency = (value: number | string): string => {
-    const num = typeof value === 'string' ? parseFloat(value) : value
+    // If it's already a number, format it directly
+    if (typeof value === 'number') {
+      return value.toFixed(2)
+    }
+    
+    // If it's a string, try to parse it
+    const num = parseFloat(value.replace(/[^0-9.-]/g, ''))
     return isNaN(num) ? '0.00' : num.toFixed(2)
   }
 
@@ -224,68 +248,68 @@ export default function ViewReceipts() {
         <div className="bg-white shadow rounded-lg overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
-  <tr>
-    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-      Receipt #
-    </th>
-    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-      Date
-    </th>
-    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-      Customer
-    </th>
-    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-      Total Amount
-    </th>
-    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-      Bill Type
-    </th>
-    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-      Details
-    </th>
-  </tr>
-</thead>
-<tbody className="bg-white divide-y divide-gray-200">
-  {filteredReceipts.map((receipt) => (
-    <tr key={receipt.id.toString()}>
-      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-        {receipt.receiptNumber}
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-        {new Date(receipt.date).toLocaleDateString()}
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-        {receipt.customerName || 'N/A'}
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-        ₹{formatCurrency(receipt.total)}
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm">
-        <span
-          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-            receipt.paymentStatus === "full"
-              ? "bg-green-100 text-green-800"
-              : receipt.paymentStatus === "advance"
-              ? "bg-yellow-100 text-yellow-800"
-              : "bg-red-100 text-red-800"
-          }`}
-        >
-          {receipt.paymentStatus === "full"
-            ? "full payment"
-            : receipt.paymentStatus === "advance"
-            ? "Advance payment"
-            : "Due payment"}
-        </span>
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-        <Link href={`/receipts/${receipt.id}?from=view`}>
-          <Button variant="outline" size="sm">
-            View Details
-          </Button>
-        </Link>
-      </td>
-    </tr>
-  ))}
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Receipt #
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Date
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Customer
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Total Amount
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Bill Type
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Details
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredReceipts.map((receipt) => (
+                <tr key={receipt.id.toString()}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    {receipt.receiptNumber}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {new Date(receipt.date).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {receipt.customerName || 'N/A'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    ₹{formatCurrency(receipt.total)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <span
+                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        receipt.paymentStatus === "full"
+                          ? "bg-green-100 text-green-800"
+                          : receipt.paymentStatus === "advance"
+                          ? "bg-yellow-100 text-yellow-800"
+                          : "bg-red-100 text-red-800"
+                      }`}
+                    >
+                      {receipt.paymentStatus === "full"
+                        ? "full payment"
+                        : receipt.paymentStatus === "advance"
+                        ? "Advance payment"
+                        : "Due payment"}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <Link href={`/receipts/${receipt.id}?from=view`}>
+                      <Button variant="outline" size="sm">
+                        View Details
+                      </Button>
+                    </Link>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

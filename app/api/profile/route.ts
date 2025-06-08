@@ -15,6 +15,7 @@ interface UserProfile {
   storeAddress: string;
   storeContact: string;
   storeCountryCode: string;
+  gstNumber?: string | null;
   profilePhoto?: string | null;
   isProfileComplete: boolean;
 }
@@ -25,6 +26,7 @@ interface UpdateProfilePayload {
   storeAddress: string;
   storeContact: string;
   storeCountryCode: string;
+  gstNumber?: string | null;
   profilePhoto?: string | null;
 }
 
@@ -34,7 +36,6 @@ interface ErrorResponse {
   missingFields?: string[];
 }
 
-// Helper function to validate database connection
 async function ensureDatabaseConnection(): Promise<boolean> {
   try {
     await initializeDatabase();
@@ -49,7 +50,6 @@ async function ensureDatabaseConnection(): Promise<boolean> {
   }
 }
 
-// Helper function to create consistent error responses
 function createErrorResponse(error: string, status: number, details?: any): NextResponse {
   const response: ErrorResponse = { error };
   
@@ -67,7 +67,6 @@ function createErrorResponse(error: string, status: number, details?: any): Next
 }
 
 export async function GET(request: Request): Promise<NextResponse> {
-  // Verify database connection first
   const isDbConnected = await ensureDatabaseConnection();
   if (!isDbConnected) {
     return createErrorResponse("Database connection failed", 500);
@@ -82,7 +81,6 @@ export async function GET(request: Request): Promise<NextResponse> {
   let connection: mysql.PoolConnection | undefined;
 
   try {
-    // Verify JWT token
     const decoded = await verifyJwt(token);
     if (!decoded?.userId) {
       return createErrorResponse("Invalid or expired token", 401);
@@ -91,7 +89,6 @@ export async function GET(request: Request): Promise<NextResponse> {
     const pool = await getPool();
     connection = await pool.getConnection();
 
-    // Execute query with better type safety
     const [users] = await connection!.query<mysql.RowDataPacket[]>(
       `SELECT 
         id, 
@@ -103,6 +100,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         store_address AS storeAddress, 
         store_contact AS storeContact, 
         store_country_code AS storeCountryCode, 
+        gst_number AS gstNumber,
         profile_photo AS profilePhoto,
         profile_complete AS isProfileComplete
        FROM users 
@@ -116,7 +114,6 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const user = users[0] as UserProfile;
     
-    // Validate required fields
     const requiredFields = ['id', 'superkey', 'email'];
     const missingFields = requiredFields.filter(field => !user[field as keyof UserProfile]);
 
@@ -125,7 +122,6 @@ export async function GET(request: Request): Promise<NextResponse> {
       return createErrorResponse("Incomplete user data", 500, missingFields);
     }
 
-    // Prepare response with proper typing
     const responseData: UserProfile = {
       ...user,
       isProfileComplete: Boolean(user.isProfileComplete),
@@ -133,7 +129,6 @@ export async function GET(request: Request): Promise<NextResponse> {
     };
 
     const response = NextResponse.json(responseData);
-    // Add caching headers
     response.headers.set('Cache-Control', 'private, no-store, max-age=0');
     return response;
 
@@ -206,9 +201,14 @@ export async function PUT(request: Request): Promise<NextResponse> {
       return createErrorResponse("Missing required fields", 400, missingFields);
     }
 
-    // Additional validation for store contact (10 digits)
+    // Validate store contact (10 digits)
     if (!/^\d{10}$/.test(updateData.storeContact)) {
       return createErrorResponse("Store contact must be exactly 10 digits", 400);
+    }
+
+    // Validate GST number if provided (15 alphanumeric characters)
+    if (updateData.gstNumber && !/^[0-9A-Z]{15}$/.test(updateData.gstNumber)) {
+      return createErrorResponse("GST number must be exactly 15 alphanumeric characters", 400);
     }
 
     // Determine if profile is complete
@@ -226,6 +226,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
         store_address = ?, 
         store_contact = ?, 
         store_country_code = ?, 
+        gst_number = ?,
         profile_photo = ?,
         profile_complete = ?
        WHERE id = ?`,
@@ -235,6 +236,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
         updateData.storeAddress,
         updateData.storeContact,
         updateData.storeCountryCode,
+        updateData.gstNumber || null,
         updateData.profilePhoto || null,
         isProfileComplete ? 1 : 0,
         decoded.userId,
@@ -245,7 +247,6 @@ export async function PUT(request: Request): Promise<NextResponse> {
       return createErrorResponse("User not found or no changes made", 404);
     }
 
-    // Get the updated user profile
     const [updatedUser] = await connection!.query<mysql.RowDataPacket[]>(
       `SELECT 
         id, superkey, name, email,
@@ -254,6 +255,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
         store_address AS storeAddress, 
         store_contact AS storeContact, 
         store_country_code AS storeCountryCode, 
+        gst_number AS gstNumber,
         profile_photo AS profilePhoto,
         profile_complete AS isProfileComplete
        FROM users 

@@ -36,6 +36,7 @@ interface UserProfile {
   storeAddress: string;
   storeContact: string;
   storeCountryCode: string;
+  gstNumber?: string | null;
   profilePhoto?: string | null;
   isProfileComplete: boolean;
 }
@@ -48,6 +49,8 @@ export default function ProfilePage() {
   const [storeAddress, setStoreAddress] = useState("");
   const [storeContact, setStoreContact] = useState("");
   const [storeCountryCode, setStoreCountryCode] = useState("+91");
+  const [gstNumber, setGstNumber] = useState<string>("");
+  const [gstError, setGstError] = useState("");
   const [contactError, setContactError] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -56,6 +59,14 @@ export default function ProfilePage() {
   const [redirectFrom, setRedirectFrom] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  // Password states
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Profile photo states
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
@@ -86,6 +97,7 @@ export default function ProfilePage() {
       setStoreAddress(userData.storeAddress || "");
       setStoreContact(userData.storeContact || "");
       setStoreCountryCode(userData.storeCountryCode || "+91");
+      setGstNumber(userData.gstNumber || "");
       setProfilePhoto(userData.profilePhoto || null);
     },
     [checkProfileCompletion]
@@ -189,10 +201,36 @@ export default function ProfilePage() {
     return true;
   };
 
+  const validateGstNumber = (gst: string): boolean => {
+    if (!gst) {
+      setGstError("");
+      return true; // GST is optional
+    }
+    
+    if (gst.length !== 15) {
+      setGstError("GST number must be exactly 15 characters");
+      return false;
+    }
+    
+    if (!/^[0-9A-Z]{15}$/.test(gst)) {
+      setGstError("GST number must be 15 digit alphanumeric");
+      return false;
+    }
+    
+    setGstError("");
+    return true;
+  };
+
   const handlePhoneChange = (value: string, countryCode: string) => {
     setStoreContact(value || "");
     setStoreCountryCode(countryCode || "+91");
     validateContact(value);
+  };
+
+  const handleGstChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.toUpperCase();
+    setGstNumber(value);
+    validateGstNumber(value);
   };
 
   const uploadProfilePhoto = async (file: File, token: string): Promise<string | null> => {
@@ -245,6 +283,11 @@ export default function ProfilePage() {
       return;
     }
 
+    if (!validateGstNumber(gstNumber)) {
+      setLoading(false);
+      return;
+    }
+
     try {
       const userJSON = localStorage.getItem("currentUser");
       if (!userJSON) {
@@ -261,6 +304,7 @@ export default function ProfilePage() {
         storeAddress,
         storeContact,
         storeCountryCode,
+        gstNumber: gstNumber || null, // Send null if empty
       };
 
       // Handle profile photo upload if a new file was selected
@@ -312,7 +356,18 @@ export default function ProfilePage() {
     }
   };
 
-  const handleProfileCompletion = async (isComplete: boolean) => {
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsChangingPassword(true);
+    setPasswordError("");
+    setPasswordSuccess("");
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New passwords don't match");
+      setIsChangingPassword(false);
+      return;
+    }
+
     try {
       const userJSON = localStorage.getItem("currentUser");
       if (!userJSON) {
@@ -322,25 +377,31 @@ export default function ProfilePage() {
 
       const currentUser = JSON.parse(userJSON);
 
-      const response = await fetch("/api/profile", {
-        method: "PATCH",
+      const response = await fetch("/api/profile/password", {
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${currentUser.token}`,
         },
-        body: JSON.stringify({ isProfileComplete: isComplete }),
+        body: JSON.stringify({
+          currentPassword,
+          newPassword
+        }),
       });
 
       if (!response.ok) {
-        throw new Error("Failed to update profile completion status");
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to change password");
       }
 
-      const data = await response.json();
-      setUser((prev) => (prev ? { ...prev, isProfileComplete: isComplete } : null));
-      return data;
-    } catch (error) {
-      console.error("Error updating profile completion:", error);
-      throw error;
+      setPasswordSuccess("Password updated successfully");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (error: any) {
+      setPasswordError(error.message || "Failed to change password");
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -662,6 +723,25 @@ export default function ProfilePage() {
                     )}
                   </div>
 
+                  <div className="space-y-2">
+                    <Label htmlFor="gstNumber">GST Number</Label>
+                    <Input
+                      id="gstNumber"
+                      type="text"
+                      value={gstNumber}
+                      onChange={handleGstChange}
+                      placeholder="Enter 15 digit GST number (optional)"
+                      maxLength={15}
+                      className="uppercase"
+                    />
+                    {gstError && (
+                      <p className="text-sm text-red-600">{gstError}</p>
+                    )}
+                    <p className="text-sm text-gray-500">
+                      Optional - Must be exactly 15 alphanumeric characters
+                    </p>
+                  </div>
+
                   <Button type="submit" disabled={loading} className="w-full">
                     {loading ? "Updating..." : "Update Profile"}
                   </Button>
@@ -679,41 +759,74 @@ export default function ProfilePage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div>
+                <div className="space-y-4">
+                  <h3 className="font-medium">Change Password</h3>
+                  <form onSubmit={handlePasswordChange} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="currentPassword">Current Password</Label>
+                      <Input
+                        id="currentPassword"
+                        type="password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        placeholder="Enter your current password"
+                        required
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="newPassword">New Password</Label>
+                      <Input
+                        id="newPassword"
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Enter your new password"
+                        required
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                      <Input
+                        id="confirmPassword"
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Confirm your new password"
+                        required
+                      />
+                    </div>
+                    
+                    {passwordError && (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>{passwordError}</AlertDescription>
+                      </Alert>
+                    )}
+                    
+                    {passwordSuccess && (
+                      <Alert className="bg-green-50 text-green-800 border-green-200">
+                        <AlertDescription>{passwordSuccess}</AlertDescription>
+                      </Alert>
+                    )}
+                    
+                    <Button 
+                      type="submit" 
+                      disabled={isChangingPassword} 
+                      className="w-full"
+                    >
+                      {isChangingPassword ? "Updating..." : "Update Password"}
+                    </Button>
+                  </form>
+                </div>
+
+                <div className="border-t pt-4">
                   <h3 className="font-medium mb-2">Session Management</h3>
                   <Button variant="outline" onClick={handleLogout}>
                     <LogOut className="mr-2 h-4 w-4" />
                     Log out of all devices
                   </Button>
-                </div>
-
-                <div>
-                  <h3 className="font-medium mb-2">Profile Completion</h3>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm">
-                        {user.isProfileComplete
-                          ? "Your profile is complete"
-                          : "Your profile is incomplete"}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {user.isProfileComplete
-                          ? "You can access all features"
-                          : "Complete your profile to access all features"}
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      onClick={() => handleProfileCompletion(!user.isProfileComplete)}
-                      disabled={loading}
-                    >
-                      {loading
-                        ? "Updating..."
-                        : user.isProfileComplete
-                        ? "Mark as Incomplete"
-                        : "Mark as Complete"}
-                    </Button>
-                  </div>
                 </div>
               </CardContent>
             </Card>

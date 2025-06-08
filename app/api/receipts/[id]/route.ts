@@ -21,6 +21,7 @@ interface ReceiptPreview {
   paymentDetails: PaymentDetails;
   storeInfo: StoreInfo;
   totalTax: number;
+  gstNumber?: string;
 }
 
 interface ReceiptItem {
@@ -42,6 +43,7 @@ interface StoreInfo {
   address: string;
   contact: string;
   countryCode: string;
+  gstNumber?: string;
 }
 
 function formatDateForMySQL(date: Date | string): string {
@@ -123,7 +125,8 @@ export async function GET(
         u.store_name AS storeName,
         u.store_address AS storeAddress,
         u.store_contact AS storeContact,
-        u.store_country_code AS storeCountryCode
+        u.store_country_code AS storeCountryCode,
+        u.gst_number AS gstNumber
        FROM receipts r
        JOIN users u ON r.user_id = u.id
        WHERE r.id = ? LIMIT 1`,
@@ -187,7 +190,9 @@ export async function GET(
         address: receipt.storeAddress,
         contact: receipt.storeContact,
         countryCode: receipt.storeCountryCode,
+        gstNumber: receipt.gstNumber || undefined,
       },
+      gstNumber: receipt.gstNumber || undefined,
     };
 
     return NextResponse.json(response);
