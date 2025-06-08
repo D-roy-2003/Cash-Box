@@ -193,18 +193,6 @@ export default function AccountsPage() {
     const userData = JSON.parse(userJSON);
 
     try {
-      // Check profile completion
-      const profileRes = await fetch("/api/profile", {
-        headers: { Authorization: `Bearer ${userData.token}` },
-      });
-      if (!profileRes.ok) throw new Error("Failed to fetch profile");
-      const profile = await profileRes.json();
-
-      if (!profile.isProfileComplete) {
-        router.push("/profile?from=/accounts");
-        return;
-      }
-
       // Fetch transactions data
       const response = await fetch("/api/transactions", {
         headers: { Authorization: `Bearer ${userData.token}` },
@@ -217,7 +205,6 @@ export default function AccountsPage() {
       setTransactions(data.transactions);
       setBalance(data.balance);
       setTotalDueBalance(currentTotalDue);
-      setUser(profile);
 
       // Save to localStorage for persistence
       localStorage.setItem(

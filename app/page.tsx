@@ -143,6 +143,27 @@ export default function Home() {
     }
   }
 
+  const handleCreateReceiptClick = (e: React.MouseEvent) => {
+    if (!user) {
+      e.preventDefault()
+      router.push("/login")
+      return
+    }
+
+    const userJSON = localStorage.getItem("currentUser")
+    if (!userJSON) {
+      e.preventDefault()
+      router.push("/login")
+      return
+    }
+
+    const currentUser = JSON.parse(userJSON)
+    if (!currentUser?.isProfileComplete) {
+      e.preventDefault()
+      router.push("/profile?from=/create")
+    }
+  }
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <header className="w-full py-4 px-6 flex justify-between items-center border-b bg-gray-800 text-white">
@@ -275,13 +296,33 @@ export default function Home() {
             Create professional receipts and maintain accounts for your business in seconds
           </p>
           <div className="flex justify-center space-x-4 flex-wrap gap-4">
-            <Link href="/create">
-              <Button size="lg" className="font-medium">
+            <Link 
+              href={user ? "/create" : "#"} 
+              onClick={handleCreateReceiptClick}
+              className={!user ? "cursor-not-allowed" : ""}
+            >
+              <Button
+                size="lg"
+                className={`font-medium ${
+                  !user ? "opacity-70" : ""
+                }`}
+                disabled={!user}
+              >
                 Create Receipt <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
-            <Link href="/accounts">
-              <Button size="lg" className="font-medium">
+            <Link 
+              href={user ? "/accounts" : "#"} 
+              onClick={handleViewReceiptsClick}
+              className={!user ? "cursor-not-allowed" : ""}
+            >
+              <Button
+                size="lg"
+                className={`font-medium ${
+                  !user ? "opacity-70" : ""
+                }`}
+                disabled={!user}
+              >
                 Accounts <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
@@ -303,7 +344,7 @@ export default function Home() {
           </div>
           {!user && (
             <p className="text-sm text-gray-500">
-              Please login to access all features including View Receipts
+              Please login to access all features
             </p>
           )}
         </div>

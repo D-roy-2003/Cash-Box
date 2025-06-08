@@ -407,6 +407,26 @@ export default function ProfilePage() {
     }
   };
 
+  // Password validation function
+  const validatePassword = (password: string): { isValid: boolean; error: string } => {
+    if (password.length < 8) {
+      return { isValid: false, error: "Password must be at least 8 characters long" };
+    }
+    if (!/[A-Z]/.test(password)) {
+      return { isValid: false, error: "Password must contain at least one uppercase letter" };
+    }
+    if (!/[a-z]/.test(password)) {
+      return { isValid: false, error: "Password must contain at least one lowercase letter" };
+    }
+    if (!/[0-9]/.test(password)) {
+      return { isValid: false, error: "Password must contain at least one number" };
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+      return { isValid: false, error: "Password must contain at least one special character" };
+    }
+    return { isValid: true, error: "" };
+  };
+
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsChangingPassword(true);
@@ -415,6 +435,14 @@ export default function ProfilePage() {
 
     if (newPassword !== confirmPassword) {
       setPasswordError("New passwords don't match");
+      setIsChangingPassword(false);
+      return;
+    }
+
+    // Validate new password
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.isValid) {
+      setPasswordError(passwordValidation.error);
       setIsChangingPassword(false);
       return;
     }
@@ -791,6 +819,16 @@ export default function ProfilePage() {
                         placeholder="Enter your new password"
                         required
                       />
+                      <p className="text-sm text-gray-500">
+                        Password must contain:
+                        <ul className="list-disc list-inside">
+                          <li>At least 8 characters</li>
+                          <li>At least one uppercase letter</li>
+                          <li>At least one lowercase letter</li>
+                          <li>At least one number</li>
+                          <li>At least one special character</li>
+                        </ul>
+                      </p>
                     </div>
                     
                     <div className="space-y-2">
