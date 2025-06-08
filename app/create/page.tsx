@@ -130,9 +130,8 @@ export default function CreateReceipt() {
 
   const generateReceiptNumber = async (token: string) => {
     try {
-      const currentYear = new Date().getFullYear();
       const response = await fetch(
-        `/api/receipts/last-number?year=${currentYear}`,
+        `/api/receipts/next-number`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -141,10 +140,7 @@ export default function CreateReceipt() {
       if (!response.ok) throw new Error("Failed to fetch last receipt number");
 
       const data = await response.json();
-      const count = data.lastNumber + 1;
-
-      const receiptNumber = `REC-${count.toString().padStart(4, "0")}`;
-      setReceiptData((prev) => ({ ...prev, receiptNumber }));
+      setReceiptData((prev) => ({ ...prev, receiptNumber: data.receiptNumber }));
     } catch (error) {
       console.error("Error generating receipt number:", error);
       const timestamp = Date.now().toString().slice(-4);

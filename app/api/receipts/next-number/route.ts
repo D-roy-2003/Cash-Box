@@ -3,6 +3,63 @@ import { NextResponse } from "next/server";
 import { getPool } from "@/lib/database";
 import { verifyJwt } from "@/lib/auth";
 
+function generatePrefix(storeName: string, userName: string, extraChars: number = 0): string {
+  const firstStore = storeName[0].toUpperCase();
+  const firstUser = userName[0].toUpperCase();
+  const lastStore = storeName.slice(-1).toUpperCase();
+  
+  // Get additional characters from store name if needed
+  let extraPrefix = '';
+  if (extraChars > 0) {
+    // Skip first and last characters as they're already used
+    const availableChars = storeName.slice(1, -1).toUpperCase();
+    for (let i = 0; i < extraChars && i < availableChars.length; i++) {
+      extraPrefix += availableChars[i];
+    }
+    // If we need more characters, use user's name
+    if (extraChars > availableChars.length) {
+      const userChars = userName.slice(1).toUpperCase();
+      for (let i = 0; i < extraChars - availableChars.length && i < userChars.length; i++) {
+        extraPrefix += userChars[i];
+      }
+    }
+  }
+  
+  return `${firstStore}${firstUser}${lastStore}${extraPrefix}-`;
+}
+
+async function generateUniqueReceiptNumber(connection: any, storeName: string, userName: string, userId: string, retryCount = 0): Promise<string> {
+  const prefix = generatePrefix(storeName, userName, retryCount);
+  
+  // Find the last receipt number for this prefix
+  const [receiptRows] = await connection.query(
+    "SELECT receipt_number FROM receipts WHERE user_id = ? AND receipt_number LIKE ? ORDER BY receipt_number DESC LIMIT 1",
+    [userId, `${prefix}%`]
+  );
+
+  let nextNumber = 1;
+  if (receiptRows.length > 0) {
+    const lastReceiptNumber = receiptRows[0].receipt_number;
+    const lastNumberPart = lastReceiptNumber.replace(prefix, "");
+    nextNumber = parseInt(lastNumberPart, 10) + 1;
+  }
+
+  const receiptNumber = `${prefix}${nextNumber.toString().padStart(5, "0")}`;
+
+  // Check if this receipt number already exists
+  const [existingReceipts] = await connection.query(
+    "SELECT COUNT(*) as count FROM receipts WHERE receipt_number = ?",
+    [receiptNumber]
+  );
+
+  if (existingReceipts[0].count > 0) {
+    // Try again with an extra character in the prefix
+    return generateUniqueReceiptNumber(connection, storeName, userName, userId, retryCount + 1);
+  }
+
+  return receiptNumber;
+}
+
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
@@ -17,7 +74,7 @@ export async function GET(request: Request) {
     if (!decoded?.userId) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
-    const userId = decoded.userId;
+    const userId = String(decoded.userId);
 
     const pool = await getPool();
     connection = await pool.getConnection();
@@ -39,26 +96,8 @@ export async function GET(request: Request) {
       );
     }
 
-    // Generate prefix
-    const firstStore = storeName[0].toUpperCase();
-    const firstUser = userName[0].toUpperCase();
-    const lastStore = storeName.slice(-1).toUpperCase();
-    const prefix = `${firstStore}${firstUser}${lastStore}-`;
-
-    // Find the last receipt number for this prefix
-    const [receiptRows] = await connection.query(
-      "SELECT receipt_number FROM receipts WHERE user_id = ? AND receipt_number LIKE ? ORDER BY receipt_number DESC LIMIT 1",
-      [userId, `${prefix}%`]
-    );
-
-    let nextNumber = 1;
-    if (receiptRows.length > 0) {
-      const lastReceiptNumber = receiptRows[0].receipt_number;
-      const lastNumberPart = lastReceiptNumber.replace(prefix, "");
-      nextNumber = parseInt(lastNumberPart, 10) + 1;
-    }
-
-    const receiptNumber = `${prefix}${nextNumber.toString().padStart(5, "0")}`;
+    // Generate unique receipt number
+    const receiptNumber = await generateUniqueReceiptNumber(connection, storeName, userName, userId);
 
     return NextResponse.json({ receiptNumber });
   } catch (error) {
