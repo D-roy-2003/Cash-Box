@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { ArrowLeft, FileText, Download, RefreshCw, Bell, Facebook, Instagram, Linkedin, X, ArrowRight } from "lucide-react";
+import { ArrowLeft, FileText, Download, RefreshCw, Bell, Facebook, Instagram, Linkedin, X, ArrowRight, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
@@ -15,6 +15,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ImageViewer } from "@/components/image-viewer";
 import { Footer } from "@/components/footer";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface Transaction {
   id: string;
@@ -61,6 +71,12 @@ export default function AccountsPage() {
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationRef = useRef<HTMLDivElement | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const transactionsPerPage = 10;
+  const [isClearHistoryDialogOpen, setIsClearHistoryDialogOpen] = useState(false);
+  const [clearHistoryPassword, setClearHistoryPassword] = useState("");
+  const [isClearingHistory, setIsClearingHistory] = useState(false);
+  const [clearHistoryError, setClearHistoryError] = useState("");
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -411,6 +427,67 @@ export default function AccountsPage() {
     return new Date(b.date).getTime() - new Date(a.date).getTime();
   });
 
+  // Calculate pagination
+  const indexOfLastTransaction = currentPage * transactionsPerPage;
+  const indexOfFirstTransaction = indexOfLastTransaction - transactionsPerPage;
+  const currentTransactions = sortedTransactions.slice(indexOfFirstTransaction, indexOfLastTransaction);
+  const totalPages = Math.ceil(sortedTransactions.length / transactionsPerPage);
+
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+  };
+
+  const handleClearHistory = async () => {
+    if (!clearHistoryPassword) {
+      setClearHistoryError("Please enter your password");
+      return;
+    }
+
+    setIsClearingHistory(true);
+    setClearHistoryError("");
+
+    try {
+      const userJSON = localStorage.getItem("currentUser");
+      if (!userJSON) {
+        router.push("/login");
+        return;
+      }
+
+      const userData = JSON.parse(userJSON);
+
+      const response = await fetch("/api/transactions/clear", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${userData.token}`,
+        },
+        body: JSON.stringify({
+          password: clearHistoryPassword,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to clear transaction history");
+      }
+
+      // Clear local state
+      setTransactions([]);
+      setBalance(0);
+      localStorage.setItem("accountTransactions", JSON.stringify([]));
+      localStorage.setItem("accountBalance", "0");
+      
+      // Close dialog and reset form
+      setIsClearHistoryDialogOpen(false);
+      setClearHistoryPassword("");
+      setClearHistoryError("");
+    } catch (error: any) {
+      setClearHistoryError(error.message || "Failed to clear transaction history");
+    } finally {
+      setIsClearingHistory(false);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <header className="w-full py-4 px-6 flex justify-between items-center border-b bg-gray-800 text-white">
@@ -637,13 +714,72 @@ export default function AccountsPage() {
                 <div className="mt-8">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-medium">Transaction History</h3>
-                    <Button
-                      onClick={exportToExcel}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      <Download className="mr-2 h-4 w-4" /> Export to Excel
-                    </Button>
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="destructive"
+                        onClick={() => setIsClearHistoryDialogOpen(true)}
+                        className="bg-red-600 hover:bg-red-700"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" /> Clear History
+                      </Button>
+                      <Button
+                        onClick={exportToExcel}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        <Download className="mr-2 h-4 w-4" /> Export to Excel
+                      </Button>
+                    </div>
                   </div>
+
+                  {/* Clear History Dialog */}
+                  <Dialog open={isClearHistoryDialogOpen} onOpenChange={setIsClearHistoryDialogOpen}>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Clear Transaction History</DialogTitle>
+                        <DialogDescription>
+                          This action will permanently delete all transaction history. This cannot be undone.
+                          Receipts and unpaid due bills will not be affected.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="py-4">
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="password">Enter your password to confirm</Label>
+                            <Input
+                              id="password"
+                              type="password"
+                              value={clearHistoryPassword}
+                              onChange={(e) => setClearHistoryPassword(e.target.value)}
+                              placeholder="Enter your password"
+                            />
+                          </div>
+                          {clearHistoryError && (
+                            <p className="text-sm text-red-600">{clearHistoryError}</p>
+                          )}
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setIsClearHistoryDialogOpen(false);
+                            setClearHistoryPassword("");
+                            setClearHistoryError("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          onClick={handleClearHistory}
+                          disabled={isClearingHistory}
+                        >
+                          {isClearingHistory ? "Clearing..." : "Clear History"}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+
                   <div className="border rounded-lg overflow-hidden hidden md:block">
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-gray-200">
@@ -667,7 +803,7 @@ export default function AccountsPage() {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {sortedTransactions.map((transaction) => (
+                          {currentTransactions.map((transaction) => (
                             <tr key={transaction.id}>
                               <td className="px-6 py-4 text-sm text-gray-500">
                                 {formatDate(transaction.date)}
@@ -706,10 +842,48 @@ export default function AccountsPage() {
                         </tbody>
                       </table>
                     </div>
+                    {totalPages > 1 && (
+                      <div className="px-6 py-4 bg-gray-50 border-t flex items-center justify-between">
+                        <div className="text-sm text-gray-700">
+                          Showing {indexOfFirstTransaction + 1} to {Math.min(indexOfLastTransaction, sortedTransactions.length)} of {sortedTransactions.length} transactions
+                        </div>
+                        <div className="flex space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                          >
+                            Previous
+                          </Button>
+                          <div className="flex items-center space-x-1">
+                            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                              <Button
+                                key={page}
+                                variant={currentPage === page ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => handlePageChange(page)}
+                                className="w-8 h-8"
+                              >
+                                {page}
+                              </Button>
+                            ))}
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="md:hidden mt-4 space-y-4">
-                    {sortedTransactions.map((transaction) => (
+                    {currentTransactions.map((transaction) => (
                       <div
                         key={transaction.id}
                         className={`p-4 rounded-lg border ${

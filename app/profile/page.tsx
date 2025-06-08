@@ -439,6 +439,13 @@ export default function ProfilePage() {
       return;
     }
 
+    // Check if new password is same as current password
+    if (newPassword === currentPassword) {
+      setPasswordError("New password must be different from current password");
+      setIsChangingPassword(false);
+      return;
+    }
+
     // Validate new password
     const passwordValidation = validatePassword(newPassword);
     if (!passwordValidation.isValid) {
