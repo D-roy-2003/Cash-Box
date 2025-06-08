@@ -419,7 +419,7 @@ export default function AccountsPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
-      <header className="w-full py-4 px-6 flex justify-between items-center border-b bg-black text-white">
+      <header className="w-full py-4 px-6 flex justify-between items-center border-b bg-gray-800 text-white">
         <h1 className="text-xl font-bold">Cash-Box</h1>
         <div className="flex items-center space-x-4">
           {user && (

@@ -73,6 +73,7 @@ export default function ProfilePage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const checkProfileCompletion = useCallback(
     (profileData: Partial<UserProfile>): boolean => {
@@ -235,6 +236,19 @@ export default function ProfilePage() {
 
   const uploadProfilePhoto = async (file: File, token: string): Promise<string | null> => {
     try {
+      setIsUploading(true);
+      setError("");
+
+      // Validate file type
+      if (!file.type.startsWith("image/")) {
+        throw new Error("Please select an image file");
+      }
+
+      // Validate file size (5MB max)
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error("File size too large. Maximum 5MB allowed.");
+      }
+
       const formData = new FormData();
       formData.append("file", file);
 
@@ -247,14 +261,50 @@ export default function ProfilePage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to upload profile photo");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to upload profile photo");
       }
 
       const data = await response.json();
       return data.filePath;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Upload error:", error);
-      throw error;
+      throw new Error(error.message || "Failed to upload profile photo");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleProfilePhotoClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setError(""); // Clear any previous errors
+      setSelectedFile(file);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setProfilePhoto(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeProfilePhoto = () => {
+    setProfilePhoto(null);
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const openFullScreenPhoto = () => {
+    if (profilePhoto) {
+      setIsImageViewerOpen(true);
     }
   };
 
@@ -304,17 +354,18 @@ export default function ProfilePage() {
         storeAddress,
         storeContact,
         storeCountryCode,
-        gstNumber: gstNumber || null, // Send null if empty
+        gstNumber: gstNumber || null,
       };
 
       // Handle profile photo upload if a new file was selected
       if (selectedFile) {
         try {
           const photoUrl = await uploadProfilePhoto(selectedFile, currentUser.token);
-          updatePayload.profilePhoto = photoUrl;
-        } catch (uploadError) {
-          console.error("Profile photo upload failed:", uploadError);
-          setError("Failed to upload profile photo");
+          if (photoUrl) {
+            updatePayload.profilePhoto = photoUrl;
+          }
+        } catch (uploadError: any) {
+          setError(uploadError.message || "Failed to upload profile photo");
           setLoading(false);
           return;
         }
@@ -410,48 +461,6 @@ export default function ProfilePage() {
     router.push("/login");
   };
 
-  const handleProfilePhotoClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (!file.type.startsWith("image/")) {
-        setError("Please select an image file");
-        return;
-      }
-
-      if (file.size > 5 * 1024 * 1024) {
-        setError("File size too large. Maximum 5MB allowed.");
-        return;
-      }
-
-      setSelectedFile(file);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setProfilePhoto(event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const removeProfilePhoto = () => {
-    setProfilePhoto(null);
-    setSelectedFile(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
-
-  const openFullScreenPhoto = () => {
-    if (profilePhoto) {
-      setIsImageViewerOpen(true);
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -476,9 +485,7 @@ export default function ProfilePage() {
               <Button onClick={() => window.location.reload()}>Retry</Button>
             </div>
             <div className="mt-2 text-center">
-              <Button variant="link" onClick={() => router.push("/login")}>
-                Or go to login page
-              </Button>
+              <Button variant="link" onClick={() => router.push("/login")}>Or go to login page</Button>
             </div>
           </CardContent>
         </Card>
@@ -544,7 +551,7 @@ export default function ProfilePage() {
       </div>
 
       <div className="max-w-4xl mx-auto space-y-8">
-        {showProfileAlert && !user.isProfileComplete && (
+        {!isLoading && showProfileAlert && user && !user.isProfileComplete && (
           <Alert className="bg-amber-50 border-amber-200 text-amber-800">
             <AlertCircle className="h-4 w-4 text-amber-800" />
             <AlertDescription>
@@ -602,12 +609,12 @@ export default function ProfilePage() {
                 />
               </div>
               <div>
-                <CardTitle className="text-2xl">{user.name}</CardTitle>
+                <CardTitle className="text-2xl">{user?.name}</CardTitle>
                 <CardDescription className="text-sm text-gray-500">
-                  Member since {formatDate(user.createdAt)}
+                  Member since {formatDate(user?.createdAt || "")}
                 </CardDescription>
                 <CardDescription className="text-sm">
-                  {user.email}
+                  {user?.email}
                 </CardDescription>
               </div>
             </div>
@@ -742,8 +749,8 @@ export default function ProfilePage() {
                     </p>
                   </div>
 
-                  <Button type="submit" disabled={loading} className="w-full">
-                    {loading ? "Updating..." : "Update Profile"}
+                  <Button type="submit" disabled={loading || isUploading} className="w-full">
+                    {loading ? "Updating..." : isUploading ? "Uploading..." : "Update Profile"}
                   </Button>
                 </form>
               </CardContent>

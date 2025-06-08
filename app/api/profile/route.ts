@@ -38,7 +38,6 @@ interface ErrorResponse {
 
 async function ensureDatabaseConnection(): Promise<boolean> {
   try {
-    await initializeDatabase();
     const pool = await getPool();
     const testConnection = await pool.getConnection();
     await testConnection.ping();

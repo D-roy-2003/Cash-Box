@@ -394,6 +394,9 @@ export async function POST(request: Request) {
       await processDueRecords(connection!, receiptId, body, userId);
     }
 
+    // Always process the account transaction for full/advance payments
+    await processAccountTransaction(connection!, receiptId, body, userId);
+
     await connection!.commit();
     console.log("Transaction committed successfully");
 
