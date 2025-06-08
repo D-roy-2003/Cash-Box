@@ -167,34 +167,12 @@ export async function PUT(request: Request) {
         throw new Error("Failed to update due record");
       }
 
-      // 3. Create the transaction record
-      const transactionData: AccountTransaction = {
-        particulars: `Payment received from ${dueRecord.customer_name}${dueRecord.receipt_number ? ` (Receipt: ${dueRecord.receipt_number})` : ''}`,
-        amount: Number(dueRecord.amount_due),
-        type: "credit",
-        user_id: userId,
-        due_record_id: dueId,
-      };
-
-      await connection!.query(
-        `INSERT INTO account_transactions
-         (particulars, amount, type, user_id, due_record_id, created_at)
-         VALUES (?, ?, ?, ?, ?, NOW())`,
-        [
-          transactionData.particulars,
-          transactionData.amount,
-          transactionData.type,
-          transactionData.user_id,
-          transactionData.due_record_id,
-        ]
-      );
-
       await connection!.commit();
       
       return NextResponse.json({ 
         success: true,
         message: "Payment processed successfully",
-        amountProcessed: transactionData.amount
+        amountProcessed: Number(dueRecord.amount_due)
       });
     } catch (error: unknown) {
       await connection!.rollback();

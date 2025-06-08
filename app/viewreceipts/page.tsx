@@ -152,7 +152,8 @@ export default function ViewReceipts() {
       <div className="container mx-auto py-8 px-4">
         <div className="flex justify-between items-center mb-6">
           <Link href="/accounts">
-            <Button variant="outline">
+            <Button variant="outline"
+            className="text-blue-600 border-blue-200 hover:bg-blue-50"> 
               <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
             </Button>
           </Link>
@@ -169,7 +170,9 @@ export default function ViewReceipts() {
     <div className="container mx-auto py-8 px-4">
       <div className="flex justify-between items-center mb-6">
         <Link href="/accounts">
-          <Button variant="outline">
+          <Button variant="outline"
+          className="text-blue-600 border-blue-200 hover:bg-blue-50"
+          >
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
           </Button>
         </Link>
@@ -247,24 +250,24 @@ export default function ViewReceipts() {
       ) : (
         <div className="bg-white shadow rounded-lg overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+            <thead className="bg-blue-600">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                   Receipt #
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                   Date
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                   Customer
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                   Total Amount
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                   Bill Type
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                   Details
                 </th>
               </tr>
@@ -291,6 +294,8 @@ export default function ViewReceipts() {
                           ? "bg-green-100 text-green-800"
                           : receipt.paymentStatus === "advance"
                           ? "bg-yellow-100 text-yellow-800"
+                          : receipt.paymentStatus === "due" && Number(receipt.total) === 0
+                          ? "bg-green-100 text-green-800"
                           : "bg-red-100 text-red-800"
                       }`}
                     >
@@ -298,6 +303,8 @@ export default function ViewReceipts() {
                         ? "full payment"
                         : receipt.paymentStatus === "advance"
                         ? "Advance payment"
+                        : receipt.paymentStatus === "due" && Number(receipt.total) === 0
+                        ? "Due Paid"
                         : "Due payment"}
                     </span>
                   </td>

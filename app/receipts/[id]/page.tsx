@@ -284,6 +284,10 @@ export default function ReceiptPreview() {
                   ? "Full Payment"
                   : receiptData.paymentStatus === "advance"
                   ? "Advance Payment"
+                  : receiptData.paymentStatus === "due" && receiptData.dueTotal === 0
+                  ? (
+                      <span className="px-2 py-1 rounded-full bg-green-100 text-green-800 font-semibold text-xs ml-1">Due Paid</span>
+                    )
                   : "Due Payment"}
               </p>
               {receiptData.paymentDetails?.phoneNumber &&
