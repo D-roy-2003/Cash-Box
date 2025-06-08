@@ -174,18 +174,18 @@ async function createReceipt(
     total: body.total
   });
 
-  // Calculate subtotal from items
-  const calculatedSubtotal = body.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  // Use gstAmount from body for total_tax, default to 0 if not provided
-  const calculatedTotalTax = body.gstAmount ?? 0;
-  const calculatedTotalDiscount = 0;
+  // Initialize all values to 0, let the trigger calculate the actual values
+  const initialSubtotal = 0;
+  const initialTotalTax = 0;
+  const initialTotalDiscount = 0;
+  const initialTotal = 0; // Initialize total to 0
 
   try {
     const [result] = await connection.query<mysql.ResultSetHeader>(
       `INSERT INTO receipts (
         receipt_number, date, customer_name, customer_contact, customer_country_code,
         payment_type, payment_status, notes,
-        subtotal, total_tax, total_discount, -- Added these three columns
+        subtotal, total_tax, total_discount,
         total, due_total, user_id, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -197,10 +197,10 @@ async function createReceipt(
         body.paymentType.toLowerCase(),
         body.paymentStatus.toLowerCase(),
         body.notes || null,
-        calculatedSubtotal, // Value for subtotal
-        calculatedTotalTax, // Value for total_tax
-        calculatedTotalDiscount, // Value for total_discount
-        body.total,
+        initialSubtotal,
+        initialTotalTax,
+        initialTotalDiscount,
+        initialTotal, // Use initialTotal instead of body.total
         body.dueTotal,
         userId,
         formatLocalDateForMySQL(new Date())
@@ -211,14 +211,15 @@ async function createReceipt(
     return result.insertId;
   } catch (error) {
     console.error("Error creating receipt:", error);
-    throw error; // Re-throw the original error to get more details
+    throw error;
   }
 }
 
 async function processReceiptItems(
   connection: mysql.PoolConnection,
   receiptId: number,
-  items: ReceiptItem[]
+  items: ReceiptItem[],
+  gstPercentage?: number
 ): Promise<void> {
   console.log("Processing receipt items for receipt ID:", receiptId);
   
@@ -230,10 +231,17 @@ async function processReceiptItems(
         price: item.price
       });
 
+      // Calculate item subtotal
+      const itemSubtotal = item.price * item.quantity;
+      
+      // Calculate tax if GST percentage is provided
+      const itemTax = gstPercentage ? (itemSubtotal * gstPercentage / 100) : 0;
+
       await connection.query(
         `INSERT INTO receipt_items (
-          receipt_id, description, quantity, price, advance_amount, due_amount
-        ) VALUES (?, ?, ?, ?, ?, ?)`,
+          receipt_id, description, quantity, price, 
+          advance_amount, due_amount, tax_amount
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           receiptId,
           item.description,
@@ -241,6 +249,7 @@ async function processReceiptItems(
           item.price,
           item.advanceAmount ?? 0,
           item.dueAmount ?? 0,
+          itemTax
         ]
       );
     }
@@ -410,7 +419,7 @@ export async function POST(request: Request) {
     console.log("Transaction started");
 
     const receiptId = await createReceipt(connection!, body, userId);
-    await processReceiptItems(connection!, receiptId, body.items);
+    await processReceiptItems(connection!, receiptId, body.items, body.gstPercentage);
 
     if (body.paymentDetails) {
       await processPaymentDetails(connection!, receiptId, body.paymentDetails);
