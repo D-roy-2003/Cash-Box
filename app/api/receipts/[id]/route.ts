@@ -233,8 +233,8 @@ export async function POST(request: Request) {
       `INSERT INTO receipts (
         receipt_number, date, customer_name, customer_contact, 
         customer_country_code, payment_type, payment_status, 
-        notes, total, due_total, user_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        notes, subtotal, total_tax, total, due_total, user_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         body.receiptNumber,
         formattedDate,
@@ -244,8 +244,10 @@ export async function POST(request: Request) {
         body.paymentType,
         body.paymentStatus,
         body.notes,
-        body.total,
-        body.dueTotal,
+        0,
+        0,
+        0,
+        0,
         body.userId,
         now,
         now,

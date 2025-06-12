@@ -710,8 +710,8 @@ export default function ProfilePage() {
                         </svg>
                       </div>
                     </div>
-                    <p className="text-sm text-gray-500">
-                      This is your unique identifier and cannot be changed
+                    <p className="text-sm text-red-500">
+                      This is your unique identifier (Never share this with anyone and Save it somewhere safe)
                     </p>
                   </div>
 
