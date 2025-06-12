@@ -47,7 +47,8 @@ A simple, performant finance management web app built with Next.js, TypeScript, 
    DB_PASSWORD=your_password
    DB_NAME=cash_box_db
    JWT_SECRET=your_jwt_secret
-   JWT_EXPIRES_IN=1d
+   JWT_EXPIRES_IN=7d
+   DATABASE_URL=mysql://[DB_USER]:[DB_PASSWORD]@localhost:3306/[DB_NAME]
    ```
 4. **Initialize the database**
    ```bash
