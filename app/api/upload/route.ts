@@ -20,9 +20,9 @@ export async function POST(request: Request) {
   }
 
   const token = authHeader.slice(7);
-  const decoded = await verifyJwt(token);
+  const userId = await verifyJwt(token);
 
-  if (!decoded?.userId) {
+  if (!userId) {
     return NextResponse.json({ error: "Invalid token" }, { status: 401 });
   }
 

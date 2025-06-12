@@ -20,8 +20,8 @@ export async function PUT(request: Request) {
   let connection: mysql.PoolConnection | undefined;
 
   try {
-    const decoded = await verifyJwt(token);
-    if (!decoded?.userId) {
+    const userId = await verifyJwt(token);
+    if (!userId) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
@@ -57,7 +57,7 @@ export async function PUT(request: Request) {
     // Get user's current password hash
     const [users]: any = await connection!.query(
       `SELECT password FROM users WHERE id = ? LIMIT 1`,
-      [decoded.userId]
+      [userId]
     );
 
     if (users.length === 0) {
@@ -84,7 +84,7 @@ export async function PUT(request: Request) {
     // Update password
     await connection!.query(
       `UPDATE users SET password = ? WHERE id = ?`,
-      [hashedPassword, decoded.userId]
+      [hashedPassword,userId]
     );
 
     return NextResponse.json({
@@ -94,7 +94,7 @@ export async function PUT(request: Request) {
   } catch (error) {
     console.error("Password update error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Password update failed" },
+      { error: "An internal server error occurred." },
       { status: 500 }
     );
   } finally {
