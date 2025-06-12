@@ -23,8 +23,8 @@ interface ReceiptBody {
   customerName: string;
   customerContact: string;
   customerCountryCode: string;
-  paymentType: 'cash' | 'online';
-  paymentStatus: 'full' | 'advance' | 'due';
+  paymentType: "cash" | "online";
+  paymentStatus: "full" | "advance" | "due";
   paymentDate?: string;
   notes?: string;
   total: number;
@@ -43,12 +43,12 @@ interface JwtPayload {
 // New helper function to format date for MySQL DATE column (YYYY-MM-DD)
 function formatDateOnlyForMySQL(date: Date | string): string {
   let d: Date;
-  
-  if (typeof date === 'string') {
-    if (date.includes('T')) {
+
+  if (typeof date === "string") {
+    if (date.includes("T")) {
       d = new Date(date);
     } else {
-      d = new Date(date + 'T00:00:00'); // Assuming local timezone input if no T
+      d = new Date(date + "T00:00:00"); // Assuming local timezone input if no T
     }
   } else {
     d = new Date(date);
@@ -58,18 +58,18 @@ function formatDateOnlyForMySQL(date: Date | string): string {
     throw new Error(`Invalid date format: ${date}`);
   }
 
-  const pad = (num: number) => num.toString().padStart(2, '0');
+  const pad = (num: number) => num.toString().padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function formatLocalDateForMySQL(date: Date | string): string {
   let d: Date;
-  
-  if (typeof date === 'string') {
-    if (date.includes('T')) {
+
+  if (typeof date === "string") {
+    if (date.includes("T")) {
       d = new Date(date);
     } else {
-      d = new Date(date + 'T00:00:00');
+      d = new Date(date + "T00:00:00");
     }
   } else {
     d = new Date(date);
@@ -79,9 +79,11 @@ function formatLocalDateForMySQL(date: Date | string): string {
     throw new Error(`Invalid date format: ${date}`);
   }
 
-  const pad = (num: number) => num.toString().padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
-         `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const pad = (num: number) => num.toString().padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
 }
 
 function validateReceiptBody(body: ReceiptBody): string | null {
@@ -89,18 +91,24 @@ function validateReceiptBody(body: ReceiptBody): string | null {
   if (!body.date) return "Date is required";
   if (!body.customerName) return "Customer name is required";
   if (!body.customerContact) return "Customer contact is required";
-  
-  const validTypes = ['cash', 'online'];
-  if (!body.paymentType || !validTypes.includes(body.paymentType.toLowerCase())) {
-    return `Payment type must be one of: ${validTypes.join(', ')}`;
+
+  const validTypes = ["cash", "online"];
+  if (
+    !body.paymentType ||
+    !validTypes.includes(body.paymentType.toLowerCase())
+  ) {
+    return `Payment type must be one of: ${validTypes.join(", ")}`;
   }
 
-  const validStatuses = ['full', 'advance', 'due'];
-  if (!body.paymentStatus || !validStatuses.includes(body.paymentStatus.toLowerCase())) {
-    return `Payment status must be one of: ${validStatuses.join(', ')}`;
+  const validStatuses = ["full", "advance", "due"];
+  if (
+    !body.paymentStatus ||
+    !validStatuses.includes(body.paymentStatus.toLowerCase())
+  ) {
+    return `Payment status must be one of: ${validStatuses.join(", ")}`;
   }
 
-  if (body.paymentStatus === 'due' && !body.paymentDate) {
+  if (body.paymentStatus === "due" && !body.paymentDate) {
     return "Expected payment date is required for due payments";
   }
 
@@ -108,11 +116,11 @@ function validateReceiptBody(body: ReceiptBody): string | null {
     const paymentDate = new Date(body.paymentDate);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     if (isNaN(paymentDate.getTime())) {
       return "Invalid payment date format";
     }
-    
+
     if (paymentDate < today) {
       return "Payment date cannot be in the past";
     }
@@ -132,12 +140,15 @@ function validateReceiptBody(body: ReceiptBody): string | null {
     }
   }
 
-  if (body.paymentStatus === 'full' && body.dueTotal !== 0) {
+  if (body.paymentStatus === "full" && body.dueTotal !== 0) {
     return "Due total must be 0 for full payment";
   }
 
-  if (body.paymentStatus === 'advance') {
-    const totalAdvance = body.items.reduce((sum, item) => sum + (item.advanceAmount || 0), 0);
+  if (body.paymentStatus === "advance") {
+    const totalAdvance = body.items.reduce(
+      (sum, item) => sum + (item.advanceAmount || 0),
+      0
+    );
     if (totalAdvance <= 0) {
       return "Advance payment must have positive advance amounts";
     }
@@ -146,8 +157,11 @@ function validateReceiptBody(body: ReceiptBody): string | null {
     }
   }
 
-  if (body.paymentStatus === 'due') {
-    const totalDue = body.items.reduce((sum, item) => sum + (item.dueAmount || 0), 0);
+  if (body.paymentStatus === "due") {
+    const totalDue = body.items.reduce(
+      (sum, item) => sum + (item.dueAmount || 0),
+      0
+    );
     if (totalDue <= 0) {
       return "Due payment must have positive due amounts";
     }
@@ -156,7 +170,10 @@ function validateReceiptBody(body: ReceiptBody): string | null {
     }
   }
 
-  if (body.gstPercentage && (body.gstPercentage < 0 || body.gstPercentage > 28)) {
+  if (
+    body.gstPercentage &&
+    (body.gstPercentage < 0 || body.gstPercentage > 28)
+  ) {
     return "GST percentage must be between 0 and 28";
   }
 
@@ -171,7 +188,7 @@ async function createReceipt(
   console.log("Creating receipt with data:", {
     receiptNumber: body.receiptNumber,
     customerName: body.customerName,
-    total: body.total
+    total: body.total,
   });
 
   // Initialize all values to 0, let the trigger calculate the actual values
@@ -203,7 +220,7 @@ async function createReceipt(
         initialTotal, // Use initialTotal instead of body.total
         body.dueTotal,
         userId,
-        formatLocalDateForMySQL(new Date())
+        formatLocalDateForMySQL(new Date()),
       ]
     );
 
@@ -222,20 +239,20 @@ async function processReceiptItems(
   gstPercentage?: number
 ): Promise<void> {
   console.log("Processing receipt items for receipt ID:", receiptId);
-  
+
   try {
     for (const [index, item] of items.entries()) {
       console.log(`Processing item ${index + 1}:`, {
         description: item.description,
         quantity: item.quantity,
-        price: item.price
+        price: item.price,
       });
 
       // Calculate item subtotal
       const itemSubtotal = item.price * item.quantity;
-      
+
       // Calculate tax if GST percentage is provided
-      const itemTax = gstPercentage ? (itemSubtotal * gstPercentage / 100) : 0;
+      const itemTax = gstPercentage ? (itemSubtotal * gstPercentage) / 100 : 0;
 
       await connection.query(
         `INSERT INTO receipt_items (
@@ -249,7 +266,7 @@ async function processReceiptItems(
           item.price,
           item.advanceAmount ?? 0,
           item.dueAmount ?? 0,
-          itemTax
+          itemTax,
         ]
       );
     }
@@ -268,7 +285,7 @@ async function processPaymentDetails(
   if (!paymentDetails) return;
 
   console.log("Processing payment details for receipt ID:", receiptId);
-  
+
   try {
     await connection.query(
       `INSERT INTO payment_details (
@@ -294,22 +311,22 @@ async function processDueRecords(
   body: ReceiptBody,
   userId: string
 ): Promise<void> {
-  if (body.paymentStatus !== 'due') return;
+  if (body.paymentStatus !== "due") return;
 
   console.log("Processing due records for receipt ID:", receiptId);
-  
+
   try {
     const productOrdered = body.items.map((i) => i.description).join(", ");
     const totalQuantity = body.items.reduce((sum, i) => sum + i.quantity, 0);
-    
+
     // Use the paymentDate from the form, or default to 7 days from now if not provided
-    const expectedPaymentDate = body.paymentDate ? 
-      new Date(body.paymentDate) : 
-      (() => {
-        const date = new Date();
-        date.setDate(date.getDate() + 7);
-        return date;
-      })();
+    const expectedPaymentDate = body.paymentDate
+      ? new Date(body.paymentDate)
+      : (() => {
+          const date = new Date();
+          date.setDate(date.getDate() + 7);
+          return date;
+        })();
 
     await connection.query(
       `INSERT INTO due_records (
@@ -342,19 +359,19 @@ async function processAccountTransaction(
   body: ReceiptBody,
   userId: string
 ): Promise<void> {
-  if (body.paymentStatus === 'due') return;
+  if (body.paymentStatus === "due") return;
 
   console.log("Processing account transaction for receipt ID:", receiptId);
-  
+
   try {
     const createdAt = formatLocalDateForMySQL(new Date());
     let transactionAmount = 0;
-    let particulars = '';
-    
-    if (body.paymentStatus === 'full') {
+    let particulars = "";
+
+    if (body.paymentStatus === "full") {
       transactionAmount = body.total;
       particulars = `Full payment from ${body.customerName} (Receipt: ${body.receiptNumber})`;
-    } else if (body.paymentStatus === 'advance') {
+    } else if (body.paymentStatus === "advance") {
       transactionAmount = body.total - body.dueTotal;
       particulars = `Advance payment from ${body.customerName} (Receipt: ${body.receiptNumber})`;
     }
@@ -364,14 +381,7 @@ async function processAccountTransaction(
         `INSERT INTO account_transactions (
           particulars, amount, type, user_id, receipt_id, created_at
         ) VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          particulars,
-          transactionAmount,
-          "credit",
-          userId,
-          receiptId,
-          createdAt,
-        ]
+        [particulars, transactionAmount, "credit", userId, receiptId, createdAt]
       );
       console.log("Account transaction processed successfully");
     }
@@ -383,7 +393,7 @@ async function processAccountTransaction(
 
 export async function POST(request: Request) {
   console.log("Receipt creation request received");
-  
+
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     console.error("Unauthorized - No bearer token");
@@ -394,12 +404,11 @@ export async function POST(request: Request) {
   let connection: mysql.PoolConnection | undefined;
 
   try {
-    const decoded = await verifyJwt(token);
-    if (!decoded?.userId) {
+    const userId = await verifyJwt(token);
+    if (!userId) {
       console.error("Invalid token - No user ID");
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
-    const userId = String(decoded.userId);
     console.log("Authenticated user ID:", userId);
 
     const body: ReceiptBody = await request.json();
@@ -414,12 +423,17 @@ export async function POST(request: Request) {
     const pool = await getPool();
     connection = await pool.getConnection();
     console.log("Database connection acquired");
-    
+
     await connection!.beginTransaction();
     console.log("Transaction started");
 
     const receiptId = await createReceipt(connection!, body, userId);
-    await processReceiptItems(connection!, receiptId, body.items, body.gstPercentage);
+    await processReceiptItems(
+      connection!,
+      receiptId,
+      body.items,
+      body.gstPercentage
+    );
 
     if (body.paymentDetails) {
       await processPaymentDetails(connection!, receiptId, body.paymentDetails);
@@ -442,7 +456,7 @@ export async function POST(request: Request) {
     });
   } catch (error: unknown) {
     console.error("Error in receipt creation:", error);
-    
+
     if (connection) {
       try {
         await connection.rollback();
@@ -455,22 +469,28 @@ export async function POST(request: Request) {
     let errorMessage = "Unknown error occurred";
     if (error instanceof Error) {
       errorMessage = error.message;
-      
-      if (error.message.includes('Data truncated')) {
+
+      if (error.message.includes("Data truncated")) {
         errorMessage = "Invalid data format for one of the fields";
-      } else if (error.message.includes('foreign key constraint')) {
+      } else if (error.message.includes("foreign key constraint")) {
         errorMessage = "Invalid user reference";
-      } else if (error.message.includes('Duplicate entry')) {
+      } else if (error.message.includes("Duplicate entry")) {
         errorMessage = "Receipt number already exists";
       }
     }
-    
-    return NextResponse.json({ 
-      error: errorMessage,
-      details: process.env.NODE_ENV === 'development' ? 
-        (error instanceof Error ? error.stack : null) : 
-        undefined
-    }, { status: 500 });
+
+    return NextResponse.json(
+      {
+        error: errorMessage,
+        details:
+          process.env.NODE_ENV === "development"
+            ? error instanceof Error
+              ? error.stack
+              : null
+            : undefined,
+      },
+      { status: 500 }
+    );
   } finally {
     if (connection) {
       try {
@@ -491,11 +511,10 @@ export async function GET(request: Request) {
   const token = authHeader.split(" ")[1];
   let connection: mysql.PoolConnection | undefined;
   try {
-    const decoded = await verifyJwt(token);
-    if (!decoded?.userId) {
+    const userId = await verifyJwt(token);
+    if (!userId) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
-    const userId = String(decoded.userId);
     const pool = await getPool();
     connection = await pool.getConnection();
     // Fetch the latest receipt number for this user
@@ -512,11 +531,16 @@ export async function GET(request: Request) {
         nextNumber = parseInt(match[1], 10) + 1;
       }
     }
-    const receiptNumber = `${prefix}${userId}-${nextNumber.toString().padStart(4, "0")}`;
+    const receiptNumber = `${prefix}${userId}-${nextNumber
+      .toString()
+      .padStart(4, "0")}`;
     return NextResponse.json({ receiptNumber });
   } catch (error) {
     console.error("Error generating receipt number:", error);
-    return NextResponse.json({ error: "Failed to generate receipt number" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to generate receipt number" },
+      { status: 500 }
+    );
   } finally {
     if (connection) {
       try {

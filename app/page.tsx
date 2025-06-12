@@ -1,43 +1,43 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useRef } from "react"
-import Link from "next/link"
-import { ArrowRight, Bell } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
+import { ArrowRight, Bell } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { useRouter } from "next/navigation"
-import { ImageViewer } from "@/components/image-viewer"
-import { Footer } from "@/components/footer"
+} from "@/components/ui/dropdown-menu";
+import { useRouter } from "next/navigation";
+import { ImageViewer } from "@/components/image-viewer";
+import { Footer } from "@/components/footer";
 
 interface UserProfile {
-  id: string
-  name: string
-  email: string
-  profilePhoto?: string | null
+  id: string;
+  name: string;
+  email: string;
+  profilePhoto?: string | null;
 }
 
 export default function Home() {
-  const router = useRouter()
-  const [user, setUser] = useState<UserProfile | null>(null)
-  const [isImageViewerOpen, setIsImageViewerOpen] = useState(false)
-  const [notifications, setNotifications] = useState<any[]>([])
-  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false)
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
-  const notificationRef = useRef<HTMLDivElement | null>(null)
+  const router = useRouter();
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
-      const userJSON = localStorage.getItem("currentUser")
-      if (!userJSON) return
+      const userJSON = localStorage.getItem("currentUser");
+      if (!userJSON) return;
 
-      const currentUser = JSON.parse(userJSON)
-      if (!currentUser?.token) return
+      const currentUser = JSON.parse(userJSON);
+      if (!currentUser?.token) return;
 
       try {
         const response = await fetch("/api/profile", {
@@ -45,124 +45,127 @@ export default function Home() {
             Authorization: `Bearer ${currentUser.token}`,
             "Content-Type": "application/json",
           },
-        })
+        });
 
         if (response.ok) {
-          const userData = await response.json()
+          const userData = await response.json();
           setUser({
-            id: userData.id || currentUser.id,
+            id: userData.id,
             name: userData.name || currentUser.name,
             email: userData.email || currentUser.email,
-            profilePhoto: userData.profilePhoto
-          })
+            profilePhoto: userData.profilePhoto,
+          });
         } else {
-          setUser(currentUser)
+          setUser(currentUser);
         }
       } catch (error) {
-        console.error("Error fetching profile:", error)
-        setUser(currentUser)
+        console.error("Error fetching profile:", error);
+        setUser(currentUser);
       }
-    }
+    };
 
-    fetchUserProfile()
-  }, [])
+    fetchUserProfile();
+  }, []);
 
   useEffect(() => {
     if (user) {
-      const overduePayments = checkOverduePayments()
-      setNotifications(overduePayments)
+      const overduePayments = checkOverduePayments();
+      setNotifications(overduePayments);
 
-      const lastReadTime = localStorage.getItem("notificationsLastRead")
+      const lastReadTime = localStorage.getItem("notificationsLastRead");
       if (lastReadTime) {
-        const lastRead = new Date(lastReadTime)
+        const lastRead = new Date(lastReadTime);
         const hasNew = overduePayments.some((notification: any) => {
-          const createdAt = new Date(notification.createdAt)
-          return createdAt > lastRead
-        })
-        setHasUnreadNotifications(hasNew || overduePayments.length > 0)
+          const createdAt = new Date(notification.createdAt);
+          return createdAt > lastRead;
+        });
+        setHasUnreadNotifications(hasNew || overduePayments.length > 0);
       } else if (overduePayments.length > 0) {
-        setHasUnreadNotifications(true)
+        setHasUnreadNotifications(true);
       }
     }
-  }, [user])
+  }, [user]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
-        setIsNotificationsOpen(false)
+      if (
+        notificationRef.current &&
+        !notificationRef.current.contains(event.target as Node)
+      ) {
+        setIsNotificationsOpen(false);
       }
     }
 
     if (isNotificationsOpen) {
-      document.addEventListener("mousedown", handleClickOutside)
+      document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
-    }
-  }, [isNotificationsOpen])
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isNotificationsOpen]);
 
   const getProfilePhotoUrl = (profilePhoto?: string | null): string => {
-    if (!profilePhoto) return "/placeholder.svg"
-    if (profilePhoto.startsWith('http')) return profilePhoto
-    if (profilePhoto.startsWith('data:')) return profilePhoto
-    if (profilePhoto.startsWith('/Uploads/')) return profilePhoto
-    return `/Uploads/${profilePhoto.replace(/^\/+/, '')}`
-  }
+    if (!profilePhoto) return "/placeholder.svg";
+    if (profilePhoto.startsWith("http")) return profilePhoto;
+    if (profilePhoto.startsWith("data:")) return profilePhoto;
+    if (profilePhoto.startsWith("/Uploads/")) return profilePhoto;
+    return `/Uploads/${profilePhoto.replace(/^\/+/, "")}`;
+  };
 
   const handleLogout = () => {
-    localStorage.removeItem("currentUser")
-    setUser(null)
-  }
+    localStorage.removeItem("currentUser");
+    setUser(null);
+  };
 
   const checkOverduePayments = () => {
-    const dueRecordsJSON = localStorage.getItem("dueRecords")
-    if (!dueRecordsJSON) return []
+    const dueRecordsJSON = localStorage.getItem("dueRecords");
+    if (!dueRecordsJSON) return [];
 
-    const dueRecords = JSON.parse(dueRecordsJSON)
-    const today = new Date()
+    const dueRecords = JSON.parse(dueRecordsJSON);
+    const today = new Date();
 
     return dueRecords.filter((record: any) => {
-      const dueDate = new Date(record.expectedPaymentDate)
-      return !record.isPaid && dueDate < today
-    })
-  }
+      const dueDate = new Date(record.expectedPaymentDate);
+      return !record.isPaid && dueDate < today;
+    });
+  };
 
   const handleNotificationClick = () => {
-    setIsNotificationsOpen(!isNotificationsOpen)
+    setIsNotificationsOpen(!isNotificationsOpen);
     if (hasUnreadNotifications) {
-      setHasUnreadNotifications(false)
-      localStorage.setItem("notificationsLastRead", new Date().toISOString())
+      setHasUnreadNotifications(false);
+      localStorage.setItem("notificationsLastRead", new Date().toISOString());
     }
-  }
+  };
 
   const handleViewReceiptsClick = (e: React.MouseEvent) => {
     if (!user) {
-      e.preventDefault()
-      router.push("/login")
+      e.preventDefault();
+      router.push("/login");
     }
-  }
+  };
 
   const handleCreateReceiptClick = (e: React.MouseEvent) => {
     if (!user) {
-      e.preventDefault()
-      router.push("/login")
-      return
+      e.preventDefault();
+      router.push("/login");
+      return;
     }
 
-    const userJSON = localStorage.getItem("currentUser")
+    const userJSON = localStorage.getItem("currentUser");
     if (!userJSON) {
-      e.preventDefault()
-      router.push("/login")
-      return
+      e.preventDefault();
+      router.push("/login");
+      return;
     }
 
-    const currentUser = JSON.parse(userJSON)
+    const currentUser = JSON.parse(userJSON);
     if (!currentUser?.isProfileComplete) {
-      e.preventDefault()
-      router.push("/profile?from=/create")
+      e.preventDefault();
+      router.push("/profile?from=/create");
     }
-  }
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
@@ -189,7 +192,9 @@ export default function Home() {
                   className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg overflow-hidden z-20"
                 >
                   <div className="py-2 px-3 bg-gray-100 border-b">
-                    <h3 className="text-sm font-medium text-gray-800">Notifications</h3>
+                    <h3 className="text-sm font-medium text-gray-800">
+                      Notifications
+                    </h3>
                   </div>
                   <div className="max-h-64 overflow-y-auto">
                     {notifications.length > 0 ? (
@@ -205,22 +210,31 @@ export default function Home() {
                                 Payment Overdue: {notification.customerName}
                               </p>
                               <p className="text-xs text-gray-500">
-                                ₹{notification.amountDue.toFixed(2)} for {notification.productOrdered}
+                                ₹{notification.amountDue.toFixed(2)} for{" "}
+                                {notification.productOrdered}
                               </p>
                               <p className="text-xs text-red-500">
-                                Due date: {new Date(notification.expectedPaymentDate).toLocaleDateString()}
+                                Due date:{" "}
+                                {new Date(
+                                  notification.expectedPaymentDate
+                                ).toLocaleDateString()}
                               </p>
                             </div>
                           </div>
                         </Link>
                       ))
                     ) : (
-                      <div className="px-4 py-6 text-center text-sm text-gray-500">No overdue payments</div>
+                      <div className="px-4 py-6 text-center text-sm text-gray-500">
+                        No overdue payments
+                      </div>
                     )}
                   </div>
                   {notifications.length > 0 && (
                     <div className="py-2 px-3 bg-gray-100 border-t text-center">
-                      <Link href="/accounts/due" className="text-xs font-medium text-blue-600 hover:text-blue-500">
+                      <Link
+                        href="/accounts/due"
+                        className="text-xs font-medium text-blue-600 hover:text-blue-500"
+                      >
                         View all due payments
                       </Link>
                     </div>
@@ -243,7 +257,7 @@ export default function Home() {
                         alt={user.name}
                         className="h-10 w-10 rounded-full object-cover cursor-pointer"
                         onClick={() => {
-                          setIsImageViewerOpen(true)
+                          setIsImageViewerOpen(true);
                         }}
                       />
                     ) : (
@@ -258,7 +272,9 @@ export default function Home() {
                 <DropdownMenuContent align="end" className="w-56">
                   <div className="flex flex-col space-y-1 p-2">
                     <p className="text-sm font-medium">{user.name}</p>
-                    <p className="text-xs text-muted-foreground">{user.email}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {user.email}
+                    </p>
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
@@ -268,19 +284,28 @@ export default function Home() {
                     <Link href="/accounts">Accounts</Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout}>Logout</DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleLogout}>
+                    Logout
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
           ) : (
             <div className="space-x-2">
               <Link href="/login">
-                <Button variant="outline" size="sm" className="bg-white text-black hover:bg-gray-100">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-white text-black hover:bg-gray-100"
+                >
                   Login
                 </Button>
               </Link>
               <Link href="/signup">
-                <Button size="sm" className="bg-blue-600 text-white hover:bg-blue-700">
+                <Button
+                  size="sm"
+                  className="bg-blue-600 text-white hover:bg-blue-700"
+                >
                   Sign Up
                 </Button>
               </Link>
@@ -291,43 +316,42 @@ export default function Home() {
 
       <div className="flex flex-col items-center justify-center flex-1 px-4 py-12">
         <div className="max-w-3xl w-full text-center space-y-8">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">Cash-Box</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+            Cash-Box
+          </h1>
           <p className="text-xl text-gray-600">
-            Create professional receipts and maintain accounts for your business in seconds
+            Create professional receipts and maintain accounts for your business
+            in seconds
           </p>
           <div className="flex justify-center space-x-4 flex-wrap gap-4">
-            <Link 
-              href={user ? "/create" : "#"} 
+            <Link
+              href={user ? "/create" : "#"}
               onClick={handleCreateReceiptClick}
               className={!user ? "cursor-not-allowed" : ""}
             >
               <Button
                 size="lg"
-                className={`font-medium ${
-                  !user ? "opacity-70" : ""
-                }`}
+                className={`font-medium ${!user ? "opacity-70" : ""}`}
                 disabled={!user}
               >
                 Create Receipt <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
-            <Link 
-              href={user ? "/accounts" : "#"} 
+            <Link
+              href={user ? "/accounts" : "#"}
               onClick={handleViewReceiptsClick}
               className={!user ? "cursor-not-allowed" : ""}
             >
               <Button
                 size="lg"
-                className={`font-medium ${
-                  !user ? "opacity-70" : ""
-                }`}
+                className={`font-medium ${!user ? "opacity-70" : ""}`}
                 disabled={!user}
               >
                 Accounts <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
-            <Link 
-              href={user ? "/viewreceipts" : "#"} 
+            <Link
+              href={user ? "/viewreceipts" : "#"}
               onClick={handleViewReceiptsClick}
               className={!user ? "cursor-not-allowed" : ""}
             >
@@ -360,5 +384,5 @@ export default function Home() {
       )}
       <Footer />
     </div>
-  )
+  );
 }

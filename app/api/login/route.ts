@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   try {
     // Validate request body
     const credentials: LoginRequest = await request.json();
-    
+
     // Input validation
     if (!credentials.email || !credentials.password) {
       return NextResponse.json(
@@ -58,10 +58,10 @@ export async function POST(request: Request) {
 
     try {
       // Use the query function from database.js
-      const users = await query(
+      const users = (await query(
         `SELECT id, superkey, name, email, password FROM users WHERE email = ? LIMIT 1`,
         [credentials.email]
-      ) as User[];
+      )) as User[];
 
       if (users.length === 0) {
         // Generic error message to prevent user enumeration
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
         credentials.password,
         user.password
       );
-      
+
       if (!isValidPassword) {
         return NextResponse.json(
           { error: "Invalid credentials" },
@@ -87,11 +87,7 @@ export async function POST(request: Request) {
       }
 
       // Generate JWT token
-      const token = await signJwt({
-        userId: user.id,
-        email: user.email,
-        superkey: user.superkey
-      });
+      const token = await signJwt(user.id.toString());
 
       // Prepare response without sensitive data
       const response: LoginResponse = {
@@ -104,9 +100,9 @@ export async function POST(request: Request) {
 
       return NextResponse.json(response, {
         headers: {
-          'Cache-Control': 'no-store',
-          'Pragma': 'no-cache'
-        }
+          "Cache-Control": "no-store",
+          Pragma: "no-cache",
+        },
       });
     } catch (error) {
       console.error("Database error during login:", error);
@@ -117,7 +113,7 @@ export async function POST(request: Request) {
     }
   } catch (error) {
     console.error("Login error:", error);
-    
+
     // Generic error message to avoid leaking sensitive information
     return NextResponse.json(
       { error: "An error occurred during login" },

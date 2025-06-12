@@ -2,7 +2,19 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { ArrowLeft, FileText, Download, RefreshCw, Bell, Facebook, Instagram, Linkedin, X, ArrowRight, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  FileText,
+  Download,
+  RefreshCw,
+  Bell,
+  Facebook,
+  Instagram,
+  Linkedin,
+  X,
+  ArrowRight,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
@@ -73,18 +85,19 @@ export default function AccountsPage() {
   const notificationRef = useRef<HTMLDivElement | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const transactionsPerPage = 10;
-  const [isClearHistoryDialogOpen, setIsClearHistoryDialogOpen] = useState(false);
+  const [isClearHistoryDialogOpen, setIsClearHistoryDialogOpen] =
+    useState(false);
   const [clearHistoryPassword, setClearHistoryPassword] = useState("");
   const [isClearingHistory, setIsClearingHistory] = useState(false);
   const [clearHistoryError, setClearHistoryError] = useState("");
 
   useEffect(() => {
     const fetchUserProfile = async () => {
-      const userJSON = localStorage.getItem("currentUser")
-      if (!userJSON) return
+      const userJSON = localStorage.getItem("currentUser");
+      if (!userJSON) return;
 
-      const currentUser = JSON.parse(userJSON)
-      if (!currentUser?.token) return
+      const currentUser = JSON.parse(userJSON);
+      if (!currentUser?.token) return;
 
       try {
         const response = await fetch("/api/profile", {
@@ -92,27 +105,27 @@ export default function AccountsPage() {
             Authorization: `Bearer ${currentUser.token}`,
             "Content-Type": "application/json",
           },
-        })
+        });
 
         if (response.ok) {
-          const userData = await response.json()
+          const userData = await response.json();
           setUser({
             id: userData.id || currentUser.id,
             name: userData.name || currentUser.name,
             email: userData.email || currentUser.email,
-            profilePhoto: userData.profilePhoto
-          })
+            profilePhoto: userData.profilePhoto,
+          });
         } else {
-          setUser(currentUser)
+          setUser(currentUser);
         }
       } catch (error) {
-        console.error("Error fetching profile:", error)
-        setUser(currentUser)
+        console.error("Error fetching profile:", error);
+        setUser(currentUser);
       }
-    }
+    };
 
-    fetchUserProfile()
-  }, [])
+    fetchUserProfile();
+  }, []);
 
   useEffect(() => {
     const fetchNotifications = async () => {
@@ -155,7 +168,10 @@ export default function AccountsPage() {
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+      if (
+        notificationRef.current &&
+        !notificationRef.current.contains(event.target as Node)
+      ) {
         setIsNotificationsOpen(false);
       }
     }
@@ -171,35 +187,35 @@ export default function AccountsPage() {
 
   const fetchDueRecords = async (userToken: string) => {
     try {
-      const response = await fetch('/api/due', {
-        headers: { Authorization: `Bearer ${userToken}` }
+      const response = await fetch("/api/due", {
+        headers: { Authorization: `Bearer ${userToken}` },
       });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: Failed to fetch due records`);
       }
-      
+
       const data = await response.json();
-      
+
       if (data.error) {
         throw new Error(data.error);
       }
-      
+
       const dueRecords: DueRecord[] = Array.isArray(data) ? data : [];
       const calculatedTotalDue = dueRecords
-        .filter(record => !record.isPaid)
+        .filter((record) => !record.isPaid)
         .reduce((total, record) => total + (record.amountDue || 0), 0);
-      
+
       return calculatedTotalDue;
     } catch (error) {
-      console.error('Failed to fetch due records:', error);
+      console.error("Failed to fetch due records:", error);
       return 0;
     }
   };
 
   const fetchData = async (showRefreshing = false) => {
     if (showRefreshing) setIsRefreshing(true);
-    
+
     const userJSON = localStorage.getItem("currentUser");
     if (!userJSON) {
       router.push("/login");
@@ -213,6 +229,7 @@ export default function AccountsPage() {
       const response = await fetch("/api/transactions", {
         headers: { Authorization: `Bearer ${userData.token}` },
       });
+      if (!response.ok) throw new Error("Failed to fetch");
       const data = await response.json();
 
       // Fetch current due records and calculate total
@@ -244,10 +261,10 @@ export default function AccountsPage() {
       fetchData(true); // Re-fetch all data, showing refresh spinner
     };
 
-    window.addEventListener('dueRecordPaid', handleDueRecordPaid);
+    window.addEventListener("dueRecordPaid", handleDueRecordPaid);
 
     return () => {
-      window.removeEventListener('dueRecordPaid', handleDueRecordPaid);
+      window.removeEventListener("dueRecordPaid", handleDueRecordPaid);
     };
   }, [router]);
 
@@ -303,10 +320,9 @@ export default function AccountsPage() {
       const newTransaction = data.transaction;
 
       const newTransactions = [...transactions, newTransaction];
-      const newBalance = type === "credit" 
-        ? balance + amountValue 
-        : balance - amountValue;
-      
+      const newBalance =
+        type === "credit" ? balance + amountValue : balance - amountValue;
+
       saveData(newTransactions, newBalance);
       setParticulars("");
       setAmount("");
@@ -395,10 +411,10 @@ export default function AccountsPage() {
 
   const getProfilePhotoUrl = (profilePhoto?: string | null): string => {
     if (!profilePhoto) return "/placeholder.svg";
-    if (profilePhoto.startsWith('http')) return profilePhoto;
-    if (profilePhoto.startsWith('data:')) return profilePhoto;
-    if (profilePhoto.startsWith('/Uploads/')) return profilePhoto;
-    return `/Uploads/${profilePhoto.replace(/^\/+/, '')}`;
+    if (profilePhoto.startsWith("http")) return profilePhoto;
+    if (profilePhoto.startsWith("data:")) return profilePhoto;
+    if (profilePhoto.startsWith("/Uploads/")) return profilePhoto;
+    return `/Uploads/${profilePhoto.replace(/^\/+/, "")}`;
   };
 
   const handleLogout = () => {
@@ -430,7 +446,10 @@ export default function AccountsPage() {
   // Calculate pagination
   const indexOfLastTransaction = currentPage * transactionsPerPage;
   const indexOfFirstTransaction = indexOfLastTransaction - transactionsPerPage;
-  const currentTransactions = sortedTransactions.slice(indexOfFirstTransaction, indexOfLastTransaction);
+  const currentTransactions = sortedTransactions.slice(
+    indexOfFirstTransaction,
+    indexOfLastTransaction
+  );
   const totalPages = Math.ceil(sortedTransactions.length / transactionsPerPage);
 
   const handlePageChange = (pageNumber: number) => {
@@ -476,13 +495,15 @@ export default function AccountsPage() {
       setBalance(0);
       localStorage.setItem("accountTransactions", JSON.stringify([]));
       localStorage.setItem("accountBalance", "0");
-      
+
       // Close dialog and reset form
       setIsClearHistoryDialogOpen(false);
       setClearHistoryPassword("");
       setClearHistoryError("");
     } catch (error: any) {
-      setClearHistoryError(error.message || "Failed to clear transaction history");
+      setClearHistoryError(
+        error.message || "Failed to clear transaction history"
+      );
     } finally {
       setIsClearingHistory(false);
     }
@@ -513,7 +534,9 @@ export default function AccountsPage() {
                   className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg overflow-hidden z-20"
                 >
                   <div className="py-2 px-3 bg-gray-100 border-b">
-                    <h3 className="text-sm font-medium text-gray-800">Notifications</h3>
+                    <h3 className="text-sm font-medium text-gray-800">
+                      Notifications
+                    </h3>
                   </div>
                   <div className="max-h-64 overflow-y-auto">
                     {notifications.length > 0 ? (
@@ -529,23 +552,40 @@ export default function AccountsPage() {
                                 Payment Overdue: {notification.customerName}
                               </p>
                               <p className="text-xs text-gray-500">
-                                {console.log('notification.amountDue:', notification.amountDue, 'Type:', typeof notification.amountDue)}
-                                ₹{(Number(notification.amountDue) || 0).toFixed(2)} for {notification.productOrdered}
+                                {console.log(
+                                  "notification.amountDue:",
+                                  notification.amountDue,
+                                  "Type:",
+                                  typeof notification.amountDue
+                                )}
+                                ₹
+                                {(Number(notification.amountDue) || 0).toFixed(
+                                  2
+                                )}{" "}
+                                for {notification.productOrdered}
                               </p>
                               <p className="text-xs text-red-500">
-                                Due date: {new Date(notification.expectedPaymentDate).toLocaleDateString()}
+                                Due date:{" "}
+                                {new Date(
+                                  notification.expectedPaymentDate
+                                ).toLocaleDateString()}
                               </p>
                             </div>
                           </div>
                         </Link>
                       ))
                     ) : (
-                      <div className="px-4 py-6 text-center text-sm text-gray-500">No overdue payments</div>
+                      <div className="px-4 py-6 text-center text-sm text-gray-500">
+                        No overdue payments
+                      </div>
                     )}
                   </div>
                   {notifications.length > 0 && (
                     <div className="py-2 px-3 bg-gray-100 border-t text-center">
-                      <Link href="/accounts/due" className="text-xs font-medium text-blue-600 hover:text-blue-500">
+                      <Link
+                        href="/accounts/due"
+                        className="text-xs font-medium text-blue-600 hover:text-blue-500"
+                      >
                         View all due payments
                       </Link>
                     </div>
@@ -585,28 +625,38 @@ export default function AccountsPage() {
                 <DropdownMenuContent align="end" className="w-56">
                   <div className="flex flex-col space-y-1 p-2">
                     <p className="text-sm font-medium">{user.name}</p>
-                    <p className="text-xs text-muted-foreground">{user.email}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {user.email}
+                    </p>
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
                     <Link href="/profile">Profile</Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild></DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout}>Logout</DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleLogout}>
+                    Logout
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
           ) : (
             <div className="space-x-2">
               <Link href="/login">
-                <Button variant="outline" size="sm" className="bg-white text-black hover:bg-gray-100">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-white text-black hover:bg-gray-100"
+                >
                   Login
                 </Button>
               </Link>
               <Link href="/signup">
-                <Button size="sm" className="bg-blue-600 text-white hover:bg-blue-700">
+                <Button
+                  size="sm"
+                  className="bg-blue-600 text-white hover:bg-blue-700"
+                >
                   Sign Up
                 </Button>
               </Link>
@@ -624,8 +674,8 @@ export default function AccountsPage() {
                   Create Receipt <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>
-              <Link 
-                href={user ? "/viewreceipts" : "#"} 
+              <Link
+                href={user ? "/viewreceipts" : "#"}
                 onClick={handleViewReceiptsClick}
                 className={!user ? "cursor-not-allowed" : ""}
               >
@@ -659,7 +709,9 @@ export default function AccountsPage() {
                 </div>
 
                 <div className="p-4 bg-red-50 rounded-lg text-center">
-                  <h2 className="text-lg font-medium mb-2">Total Due Balance</h2>
+                  <h2 className="text-lg font-medium mb-2">
+                    Total Due Balance
+                  </h2>
                   <p className="text-3xl font-bold text-red-600">
                     -₹{totalDueBalance.toFixed(2)}
                   </p>
@@ -732,29 +784,39 @@ export default function AccountsPage() {
                   </div>
 
                   {/* Clear History Dialog */}
-                  <Dialog open={isClearHistoryDialogOpen} onOpenChange={setIsClearHistoryDialogOpen}>
+                  <Dialog
+                    open={isClearHistoryDialogOpen}
+                    onOpenChange={setIsClearHistoryDialogOpen}
+                  >
                     <DialogContent>
                       <DialogHeader>
                         <DialogTitle>Clear Transaction History</DialogTitle>
                         <DialogDescription>
-                          This action will permanently delete all transaction history. This cannot be undone.
-                          Receipts and unpaid due bills will not be affected.
+                          This action will permanently delete all transaction
+                          history. This cannot be undone. Receipts and unpaid
+                          due bills will not be affected.
                         </DialogDescription>
                       </DialogHeader>
                       <div className="py-4">
                         <div className="space-y-4">
                           <div className="space-y-2">
-                            <Label htmlFor="password">Enter your password to confirm</Label>
+                            <Label htmlFor="password">
+                              Enter your password to confirm
+                            </Label>
                             <Input
                               id="password"
                               type="password"
                               value={clearHistoryPassword}
-                              onChange={(e) => setClearHistoryPassword(e.target.value)}
+                              onChange={(e) =>
+                                setClearHistoryPassword(e.target.value)
+                              }
                               placeholder="Enter your password"
                             />
                           </div>
                           {clearHistoryError && (
-                            <p className="text-sm text-red-600">{clearHistoryError}</p>
+                            <p className="text-sm text-red-600">
+                              {clearHistoryError}
+                            </p>
                           )}
                         </div>
                       </div>
@@ -845,7 +907,12 @@ export default function AccountsPage() {
                     {totalPages > 1 && (
                       <div className="px-6 py-4 bg-gray-50 border-t flex items-center justify-between">
                         <div className="text-sm text-gray-700">
-                          Showing {indexOfFirstTransaction + 1} to {Math.min(indexOfLastTransaction, sortedTransactions.length)} of {sortedTransactions.length} transactions
+                          Showing {indexOfFirstTransaction + 1} to{" "}
+                          {Math.min(
+                            indexOfLastTransaction,
+                            sortedTransactions.length
+                          )}{" "}
+                          of {sortedTransactions.length} transactions
                         </div>
                         <div className="flex space-x-2">
                           <Button
@@ -857,10 +924,15 @@ export default function AccountsPage() {
                             Previous
                           </Button>
                           <div className="flex items-center space-x-1">
-                            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                            {Array.from(
+                              { length: totalPages },
+                              (_, i) => i + 1
+                            ).map((page) => (
                               <Button
                                 key={page}
-                                variant={currentPage === page ? "default" : "outline"}
+                                variant={
+                                  currentPage === page ? "default" : "outline"
+                                }
                                 size="sm"
                                 onClick={() => handlePageChange(page)}
                                 className="w-8 h-8"

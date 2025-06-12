@@ -3,13 +3,17 @@ import { NextResponse } from "next/server";
 import { getPool } from "@/lib/database";
 import { verifyJwt } from "@/lib/auth";
 
-function generatePrefix(storeName: string, userName: string, extraChars: number = 0): string {
+function generatePrefix(
+  storeName: string,
+  userName: string,
+  extraChars: number = 0
+): string {
   const firstStore = storeName[0].toUpperCase();
   const firstUser = userName[0].toUpperCase();
   const lastStore = storeName.slice(-1).toUpperCase();
-  
+
   // Get additional characters from store name if needed
-  let extraPrefix = '';
+  let extraPrefix = "";
   if (extraChars > 0) {
     // Skip first and last characters as they're already used
     const availableChars = storeName.slice(1, -1).toUpperCase();
@@ -19,18 +23,28 @@ function generatePrefix(storeName: string, userName: string, extraChars: number 
     // If we need more characters, use user's name
     if (extraChars > availableChars.length) {
       const userChars = userName.slice(1).toUpperCase();
-      for (let i = 0; i < extraChars - availableChars.length && i < userChars.length; i++) {
+      for (
+        let i = 0;
+        i < extraChars - availableChars.length && i < userChars.length;
+        i++
+      ) {
         extraPrefix += userChars[i];
       }
     }
   }
-  
+
   return `${firstStore}${firstUser}${lastStore}${extraPrefix}-`;
 }
 
-async function generateUniqueReceiptNumber(connection: any, storeName: string, userName: string, userId: string, retryCount = 0): Promise<string> {
+async function generateUniqueReceiptNumber(
+  connection: any,
+  storeName: string,
+  userName: string,
+  userId: string,
+  retryCount = 0
+): Promise<string> {
   const prefix = generatePrefix(storeName, userName, retryCount);
-  
+
   // Find the last receipt number for this prefix
   const [receiptRows] = await connection.query(
     "SELECT receipt_number FROM receipts WHERE user_id = ? AND receipt_number LIKE ? ORDER BY receipt_number DESC LIMIT 1",
@@ -54,7 +68,13 @@ async function generateUniqueReceiptNumber(connection: any, storeName: string, u
 
   if (existingReceipts[0].count > 0) {
     // Try again with an extra character in the prefix
-    return generateUniqueReceiptNumber(connection, storeName, userName, userId, retryCount + 1);
+    return generateUniqueReceiptNumber(
+      connection,
+      storeName,
+      userName,
+      userId,
+      retryCount + 1
+    );
   }
 
   return receiptNumber;
@@ -70,11 +90,10 @@ export async function GET(request: Request) {
   let connection;
 
   try {
-    const decoded = await verifyJwt(token);
-    if (!decoded?.userId) {
+    const userId = await verifyJwt(token);
+    if (!userId) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
-    const userId = String(decoded.userId);
 
     const pool = await getPool();
     connection = await pool.getConnection();
@@ -97,7 +116,12 @@ export async function GET(request: Request) {
     }
 
     // Generate unique receipt number
-    const receiptNumber = await generateUniqueReceiptNumber(connection, storeName, userName, userId);
+    const receiptNumber = await generateUniqueReceiptNumber(
+      connection,
+      storeName,
+      userName,
+      userId
+    );
 
     return NextResponse.json({ receiptNumber });
   } catch (error) {

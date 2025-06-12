@@ -35,25 +35,21 @@ interface PaymentRequest {
   id: number;
 }
 
-async function verifyToken(request: Request): Promise<JwtPayload> {
+async function verifyToken(request: Request): Promise<string> {
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     throw new Error("Authorization header missing or invalid");
   }
 
   const token = authHeader.split(" ")[1];
-  const decoded = await verifyJwt(token) as JwtPayload;
-  if (!decoded?.userId) {
-    throw new Error("Invalid token");
-  }
-  return decoded;
+  return await verifyJwt(token);
 }
 
 export async function GET(request: Request) {
   let connection: mysql.PoolConnection | undefined;
 
   try {
-    const { userId } = await verifyToken(request);
+    const userId = await verifyToken(request);
     const pool = await getPool();
     connection = await pool.getConnection();
 
@@ -77,30 +73,35 @@ export async function GET(request: Request) {
       [userId]
     );
 
-    const transformedRecords = dueRecords.map(record => ({
+    const transformedRecords = dueRecords.map((record) => ({
       id: record.id.toString(),
-      customerName: record.customer_name || 'Unknown Customer',
-      customerContact: record.customer_contact || '',
-      customerCountryCode: record.customer_country_code || '+91',
-      productOrdered: record.product_ordered || 'Unknown Product',
+      customerName: record.customer_name || "Unknown Customer",
+      customerContact: record.customer_contact || "",
+      customerCountryCode: record.customer_country_code || "+91",
+      productOrdered: record.product_ordered || "Unknown Product",
       quantity: Number(record.quantity) || 0,
       amountDue: Number(record.amount_due) || 0,
-      expectedPaymentDate: record.expected_payment_date || new Date().toISOString(),
+      expectedPaymentDate:
+        record.expected_payment_date || new Date().toISOString(),
       createdAt: record.created_at || new Date().toISOString(),
       isPaid: Boolean(record.is_paid),
       paidAt: record.paid_at || null,
-      receiptNumber: record.receipt_number || null
+      receiptNumber: record.receipt_number || null,
     }));
 
     return NextResponse.json(transformedRecords);
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "Database error";
+    const errorMessage =
+      error instanceof Error ? error.message : "Database error";
     console.error("[GET] /api/due error:", error);
-    
+
     return NextResponse.json(
       { error: errorMessage },
       {
-        status: error instanceof Error && error.message.includes("Unauthorized") ? 401 : 500
+        status:
+          error instanceof Error && error.message.includes("Unauthorized")
+            ? 401
+            : 500,
       }
     );
   } finally {
@@ -112,19 +113,25 @@ export async function PUT(request: Request) {
   let connection: mysql.PoolConnection | undefined;
 
   try {
-    const { userId } = await verifyToken(request);
+    const userId = await verifyToken(request);
     const requestData: PaymentRequest = await request.json();
 
     // Validate ID
-    if (!requestData.id || (typeof requestData.id !== "number" && typeof requestData.id !== "string")) {
+    if (
+      !requestData.id ||
+      (typeof requestData.id !== "number" && typeof requestData.id !== "string")
+    ) {
       return NextResponse.json(
         { error: "Invalid due record ID" },
         { status: 400 }
       );
     }
 
-    const dueId = typeof requestData.id === "string" ? parseInt(requestData.id) : requestData.id;
-    
+    const dueId =
+      typeof requestData.id === "string"
+        ? parseInt(requestData.id)
+        : requestData.id;
+
     if (isNaN(dueId) || dueId <= 0) {
       return NextResponse.json(
         { error: "Invalid due record ID format" },
@@ -168,30 +175,31 @@ export async function PUT(request: Request) {
       }
 
       await connection!.commit();
-      
-      return NextResponse.json({ 
+
+      return NextResponse.json({
         success: true,
         message: "Payment processed successfully",
-        amountProcessed: Number(dueRecord.amount_due)
+        amountProcessed: Number(dueRecord.amount_due),
       });
     } catch (error: unknown) {
       await connection!.rollback();
       throw error;
     }
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error 
-      ? error.message 
-      : "Payment processing failed";
-    
+    const errorMessage =
+      error instanceof Error ? error.message : "Payment processing failed";
+
     console.error("[PUT] /api/due error:", error);
-    
+
     return NextResponse.json(
       { error: errorMessage },
       {
-        status: error instanceof Error && 
-               (error.message.includes("Unauthorized") || error.message.includes("Invalid token"))
-          ? 401 
-          : 400
+        status:
+          error instanceof Error &&
+          (error.message.includes("Unauthorized") ||
+            error.message.includes("Invalid token"))
+            ? 401
+            : 400,
       }
     );
   } finally {

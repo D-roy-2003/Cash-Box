@@ -44,16 +44,20 @@ async function ensureDatabaseConnection(): Promise<boolean> {
     testConnection.release();
     return true;
   } catch (error) {
-    console.error('Database connection error:', error);
+    console.error("Database connection error:", error);
     return false;
   }
 }
 
-function createErrorResponse(error: string, status: number, details?: any): NextResponse {
+function createErrorResponse(
+  error: string,
+  status: number,
+  details?: any
+): NextResponse {
   const response: ErrorResponse = { error };
-  
+
   if (details) {
-    if (typeof details === 'string') {
+    if (typeof details === "string") {
       response.details = details;
     } else if (Array.isArray(details)) {
       response.missingFields = details;
@@ -80,8 +84,8 @@ export async function GET(request: Request): Promise<NextResponse> {
   let connection: mysql.PoolConnection | undefined;
 
   try {
-    const decoded = await verifyJwt(token);
-    if (!decoded?.userId) {
+    const userId = await verifyJwt(token);
+    if (!userId) {
       return createErrorResponse("Invalid or expired token", 401);
     }
 
@@ -104,7 +108,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         profile_complete AS isProfileComplete
        FROM users 
        WHERE id = ? LIMIT 1`,
-      [decoded.userId]
+      [userId]
     );
 
     if (!users || users.length === 0) {
@@ -112,39 +116,53 @@ export async function GET(request: Request): Promise<NextResponse> {
     }
 
     const user = users[0] as UserProfile;
-    
-    const requiredFields = ['id', 'superkey', 'email'];
-    const missingFields = requiredFields.filter(field => !user[field as keyof UserProfile]);
+
+    const requiredFields = ["id", "superkey", "email"];
+    const missingFields = requiredFields.filter(
+      (field) => !user[field as keyof UserProfile]
+    );
 
     if (missingFields.length > 0) {
-      console.error('Incomplete user data returned from database', { missingFields });
+      console.error("Incomplete user data returned from database", {
+        missingFields,
+      });
       return createErrorResponse("Incomplete user data", 500, missingFields);
     }
 
     const responseData: UserProfile = {
       ...user,
       isProfileComplete: Boolean(user.isProfileComplete),
-      createdAt: user.createdAt || new Date().toISOString()
+      createdAt: user.createdAt || new Date().toISOString(),
     };
 
     const response = NextResponse.json(responseData);
-    response.headers.set('Cache-Control', 'private, no-store, max-age=0');
+    response.headers.set("Cache-Control", "private, no-store, max-age=0");
     return response;
-
   } catch (error: unknown) {
     console.error("GET /profile error:", error);
-    
+
     if (error instanceof Error) {
-      if (error.message.includes('jwt expired')) {
-        return createErrorResponse("Session expired. Please log in again.", 401);
+      if (error.message.includes("jwt expired")) {
+        return createErrorResponse(
+          "Session expired. Please log in again.",
+          401
+        );
       }
-      
-      if (error.message.includes('database')) {
-        return createErrorResponse("Database error occurred", 503, error.message);
+
+      if (error.message.includes("database")) {
+        return createErrorResponse(
+          "Database error occurred",
+          503,
+          error.message
+        );
       }
     }
 
-    return createErrorResponse("Internal server error", 500, (error as Error)?.message);
+    return createErrorResponse(
+      "Internal server error",
+      500,
+      (error as Error)?.message
+    );
   } finally {
     if (connection) {
       try {
@@ -171,14 +189,17 @@ export async function PUT(request: Request): Promise<NextResponse> {
   let connection: mysql.PoolConnection | undefined;
 
   try {
-    const decoded = await verifyJwt(token);
-    if (!decoded?.userId) {
-      return createErrorResponse("Invalid token", 401);
+    const userId = await verifyJwt(token);
+    if (!userId) {
+      return createErrorResponse("Invalid or expired token", 401);
     }
 
     const contentType = request.headers.get("content-type") || "";
     if (!contentType.includes("application/json")) {
-      return createErrorResponse("Invalid content type. Must be application/json", 400);
+      return createErrorResponse(
+        "Invalid content type. Must be application/json",
+        400
+      );
     }
 
     const updateData: UpdateProfilePayload = await request.json();
@@ -202,12 +223,18 @@ export async function PUT(request: Request): Promise<NextResponse> {
 
     // Validate store contact (10 digits)
     if (!/^\d{10}$/.test(updateData.storeContact)) {
-      return createErrorResponse("Store contact must be exactly 10 digits", 400);
+      return createErrorResponse(
+        "Store contact must be exactly 10 digits",
+        400
+      );
     }
 
     // Validate GST number if provided (15 alphanumeric characters)
     if (updateData.gstNumber && !/^[0-9A-Z]{15}$/.test(updateData.gstNumber)) {
-      return createErrorResponse("GST number must be exactly 15 alphanumeric characters", 400);
+      return createErrorResponse(
+        "GST number must be exactly 15 alphanumeric characters",
+        400
+      );
     }
 
     // Determine if profile is complete
@@ -238,7 +265,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
         updateData.gstNumber || null,
         updateData.profilePhoto || null,
         isProfileComplete ? 1 : 0,
-        decoded.userId,
+        userId,
       ]
     );
 
@@ -259,7 +286,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
         profile_complete AS isProfileComplete
        FROM users 
        WHERE id = ? LIMIT 1`,
-      [decoded.userId]
+      [userId]
     );
 
     if (!updatedUser || updatedUser.length === 0) {
@@ -271,14 +298,9 @@ export async function PUT(request: Request): Promise<NextResponse> {
       updatedProfile: updatedUser[0] as UserProfile,
       isProfileComplete,
     });
-
   } catch (error: unknown) {
     console.error("PUT /profile error:", error);
-    return createErrorResponse(
-      "Update failed", 
-      500, 
-      (error as Error)?.message
-    );
+    return createErrorResponse("Update failed", 500, (error as Error)?.message);
   } finally {
     if (connection) {
       try {
@@ -305,9 +327,9 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   let connection: mysql.PoolConnection | undefined;
 
   try {
-    const decoded = await verifyJwt(token);
-    if (!decoded?.userId) {
-      return createErrorResponse("Invalid token", 401);
+    const userId = await verifyJwt(token);
+    if (!userId) {
+      return createErrorResponse("Invalid or expired token", 401);
     }
 
     const { isProfileComplete } = await request.json();
@@ -317,7 +339,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
 
     const [result] = await connection!.query<mysql.OkPacket>(
       `UPDATE users SET profile_complete = ? WHERE id = ?`,
-      [isProfileComplete ? 1 : 0, decoded.userId]
+      [isProfileComplete ? 1 : 0, userId]
     );
 
     if (result.affectedRows === 0) {
@@ -328,14 +350,9 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       success: true,
       isProfileComplete,
     });
-
   } catch (error: unknown) {
     console.error("PATCH /profile/complete error:", error);
-    return createErrorResponse(
-      "Update failed", 
-      500, 
-      (error as Error)?.message
-    );
+    return createErrorResponse("Update failed", 500, (error as Error)?.message);
   } finally {
     if (connection) {
       try {

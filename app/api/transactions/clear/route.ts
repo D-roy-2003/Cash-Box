@@ -1,28 +1,29 @@
 import { NextResponse } from "next/server";
-import { getPool, beginTransaction, commitTransaction, rollbackTransaction } from "@/lib/database";
+import {
+  getPool,
+  beginTransaction,
+  commitTransaction,
+  rollbackTransaction,
+} from "@/lib/database";
 import bcrypt from "bcrypt";
 import { verifyJwt } from "@/lib/auth";
 
 export async function POST(req: Request) {
   let connection = null;
-  
+
   try {
     // Get the authorization token
     const authHeader = req.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json(
-        { message: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
     const token = authHeader.split(" ")[1];
-    
+
     // Verify the token and get the user ID
     let userId: string | number;
     try {
-      const decodedToken = await verifyJwt(token);
-      userId = decodedToken.userId;
+      userId = await verifyJwt(token);
     } catch (jwtError: any) {
       return NextResponse.json(
         { message: jwtError.message || "Invalid or expired token" },
@@ -52,10 +53,7 @@ export async function POST(req: Request) {
 
     if (!users || users.length === 0) {
       await rollbackTransaction(connection);
-      return NextResponse.json(
-        { message: "User not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
     const user: any = users[0];
@@ -99,4 +97,4 @@ export async function POST(req: Request) {
       { status: 500 }
     );
   }
-} 
+}

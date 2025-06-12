@@ -6,12 +6,12 @@ import type { PoolConnection } from "mysql2/promise";
 async function verifyToken(request: Request): Promise<{ userId: number }> {
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) throw new Error("Unauthorized");
-  
+
   const token = authHeader.split(" ")[1];
-  const decoded = await verifyJwt(token);
-  if (!decoded?.userId) throw new Error("Invalid token");
-  
-  return { userId: decoded.userId };
+  const userId = await verifyJwt(token);
+  if (!userId) throw new Error("Invalid token");
+
+  return { userId: Number(userId) };
 }
 
 export async function GET(request: Request) {
@@ -23,7 +23,8 @@ export async function GET(request: Request) {
     connection = await pool.getConnection();
 
     // Query with explicit type casting for numeric fields
-    const [rows] = await connection!.execute(`
+    const [rows] = await connection!.execute(
+      `
       SELECT 
         id,
         receipt_number AS receiptNumber,
@@ -34,11 +35,12 @@ export async function GET(request: Request) {
       FROM receipts
       WHERE user_id = ?
       ORDER BY date DESC
-    `, [userId]);
+    `,
+      [userId]
+    );
 
     // Simple response without additional processing
     return NextResponse.json(rows);
-    
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Database error" },

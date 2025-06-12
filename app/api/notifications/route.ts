@@ -13,11 +13,10 @@ export async function GET(request: Request) {
   let connection: mysql.PoolConnection | undefined;
 
   try {
-    const decoded = await verifyJwt(token);
-    if (!decoded?.userId) {
+    const userId = await verifyJwt(token);
+    if (!userId) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
-    const userId = String(decoded.userId);
 
     const pool = await getPool();
     connection = await pool.getConnection();
@@ -45,7 +44,7 @@ export async function GET(request: Request) {
     );
 
     // Ensure amountDue is a number and handle potential NaN values
-    const notifications = rows.map(row => {
+    const notifications = rows.map((row) => {
       const parsedAmount = parseFloat(row.amountDue);
       return {
         ...row,
@@ -69,4 +68,4 @@ export async function GET(request: Request) {
       }
     }
   }
-} 
+}
