@@ -139,13 +139,23 @@ export default function ReceiptPreview() {
     if (!dateString) return "N/A";
     
     try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) {
-        return "Invalid Date";
-      }
-      return date.toLocaleString();
+      // Split the database datetime string into parts
+      const [datePart, timePart] = dateString.split(' ');
+      const [year, month, day] = datePart.split('-');
+      
+      // Month names array
+      const monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+      ];
+      
+      // Format the date with month name
+      const formattedDate = `${day} ${monthNames[parseInt(month) - 1]} ${year}`;
+      
+      // Return date and time exactly as in the database
+      return `${formattedDate} ${timePart}`;
     } catch (error) {
-      return "Invalid Date";
+      return dateString; // Return original if formatting fails
     }
   };
 

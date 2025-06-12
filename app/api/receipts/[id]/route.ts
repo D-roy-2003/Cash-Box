@@ -99,7 +99,9 @@ export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  if (!params.id || !/^\d+$/.test(params.id)) {
+  const { id } = await params;
+  
+  if (!id || !/^\d+$/.test(id)) {
     return NextResponse.json(
       { error: "Invalid receipt ID format" },
       { status: 400 }
@@ -130,7 +132,7 @@ export async function GET(
        FROM receipts r
        JOIN users u ON r.user_id = u.id
        WHERE r.id = ? LIMIT 1`,
-      [params.id]
+      [id]
     );
 
     if (receipts.length === 0) {
@@ -146,7 +148,7 @@ export async function GET(
         due_amount AS dueAmount
        FROM receipt_items 
        WHERE receipt_id = ?`,
-      [params.id]
+      [id]
     );
 
     const [paymentDetailsRows] = await connection!.query<mysql.RowDataPacket[]>(
@@ -156,7 +158,7 @@ export async function GET(
         phone_country_code AS phoneCountryCode
        FROM payment_details 
        WHERE receipt_id = ? LIMIT 1`,
-      [params.id]
+      [id]
     );
 
     const response: ReceiptPreview = {
