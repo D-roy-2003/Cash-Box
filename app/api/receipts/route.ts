@@ -435,6 +435,25 @@ export async function POST(request: Request) {
       body.gstPercentage
     );
 
+    // Calculate total_tax from receipt_items and update the receipts table
+    let totalCalculatedTax = 0;
+    if (body.gstPercentage !== undefined && body.gstPercentage !== null && body.gstPercentage > 0) {
+      totalCalculatedTax = body.items.reduce((sum, item) => {
+        const itemSubtotal = item.price * item.quantity;
+        return sum + (itemSubtotal * body.gstPercentage!) / 100;
+      }, 0);
+    }
+
+    console.log("body.gstPercentage received in POST /api/receipts:", body.gstPercentage);
+    console.log("Calculated totalTax before DB update:", totalCalculatedTax);
+
+    // Update the receipts table with the calculated total_tax
+    await connection!.query(
+      `UPDATE receipts SET total_tax = ? WHERE id = ?`,
+      [totalCalculatedTax, receiptId]
+    );
+    console.log(`Updated receipt ${receiptId} with total_tax: ${totalCalculatedTax}`);
+
     if (body.paymentDetails) {
       await processPaymentDetails(connection!, receiptId, body.paymentDetails);
     }
