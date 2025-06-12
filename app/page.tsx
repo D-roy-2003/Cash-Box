@@ -30,6 +30,11 @@ export default function Home() {
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationRef = useRef<HTMLDivElement | null>(null);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -68,7 +73,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (user) {
+    if (user && isClient) {
       const overduePayments = checkOverduePayments();
       setNotifications(overduePayments);
 
@@ -84,7 +89,7 @@ export default function Home() {
         setHasUnreadNotifications(true);
       }
     }
-  }, [user]);
+  }, [user, isClient]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -168,8 +173,15 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
-      <header className="w-full py-4 px-6 flex justify-between items-center border-b bg-gray-800 text-white">
+    <div
+      className="flex flex-col min-h-screen"
+      style={{
+        backgroundImage: "url('/background.png')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
+    >
+      <header className="w-full py-4 px-6 flex justify-between items-center text-white">
         <h1 className="text-xl font-bold">Cash-Box</h1>
         <div className="flex items-center space-x-4">
           {user && (
@@ -314,12 +326,12 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="flex flex-col items-center justify-center flex-1 px-4 py-12">
+      <div className="flex flex-col items-center justify-center px-4 py-32 min-h-[110vh]">
         <div className="max-w-3xl w-full text-center space-y-8">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+          <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">
             Cash-Box
           </h1>
-          <p className="text-xl text-gray-600">
+          <p className="text-base text-white">
             Create professional receipts and maintain accounts for your business
             in seconds
           </p>
@@ -331,7 +343,7 @@ export default function Home() {
             >
               <Button
                 size="lg"
-                className={`font-medium ${!user ? "opacity-70" : ""}`}
+                className={`font-medium bg-blue-600 hover:bg-blue-700 text-white`}
                 disabled={!user}
               >
                 Create Receipt <ArrowRight className="ml-2 h-4 w-4" />
@@ -344,7 +356,7 @@ export default function Home() {
             >
               <Button
                 size="lg"
-                className={`font-medium ${!user ? "opacity-70" : ""}`}
+                className={`font-medium bg-blue-600 hover:bg-blue-700 text-white`}
                 disabled={!user}
               >
                 Accounts <ArrowRight className="ml-2 h-4 w-4" />
@@ -357,9 +369,7 @@ export default function Home() {
             >
               <Button
                 size="lg"
-                className={`font-medium bg-green-600 hover:bg-green-700 ${
-                  !user ? "opacity-70" : ""
-                }`}
+                className={`font-medium bg-green-600 hover:bg-green-700 text-white`}
                 disabled={!user}
               >
                 View Receipts <ArrowRight className="ml-2 h-4 w-4" />
@@ -367,7 +377,7 @@ export default function Home() {
             </Link>
           </div>
           {!user && (
-            <p className="text-sm text-gray-500">
+            <p className="text-base text-white">
               Please login to access all features
             </p>
           )}
