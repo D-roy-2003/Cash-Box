@@ -57,6 +57,8 @@ export default function ReceiptPreview() {
           const response = await fetch(`/api/receipts/${receiptId}`);
           if (!response.ok) throw new Error("Receipt not found");
           const data = await response.json();
+          console.log("receiptData.createdAt type:", typeof data.createdAt);
+          console.log("receiptData.createdAt value:", data.createdAt);
           setReceiptData(data);
         } catch (err) {
           router.push("/create");
@@ -137,26 +139,7 @@ export default function ReceiptPreview() {
 
   const formatDateTime = (dateString: string) => {
     if (!dateString) return "N/A";
-    
-    try {
-      // Split the database datetime string into parts
-      const [datePart, timePart] = dateString.split(' ');
-      const [year, month, day] = datePart.split('-');
-      
-      // Month names array
-      const monthNames = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
-      ];
-      
-      // Format the date with month name
-      const formattedDate = `${day} ${monthNames[parseInt(month) - 1]} ${year}`;
-      
-      // Return date and time exactly as in the database
-      return `${formattedDate} ${timePart}`;
-    } catch (error) {
-      return dateString; // Return original if formatting fails
-    }
+    return dateString; // Return the exact database timestamp
   };
 
   const calculateSubtotal = () => {

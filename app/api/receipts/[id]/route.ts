@@ -68,20 +68,26 @@ function getCurrentLocalTime(): string {
     String(now.getSeconds()).padStart(2, '0');
 }
 
-// Function to format database datetime to local time string
-function formatDatabaseDateToLocal(date: Date | string): string {
-  if (!date) return '';
-  
-  const d = new Date(date);
-  if (isNaN(d.getTime())) throw new Error("Invalid date format");
-  
-  // Return in local format: YYYY-MM-DD HH:MM:SS
-  return d.getFullYear() + '-' +
-    String(d.getMonth() + 1).padStart(2, '0') + '-' +
-    String(d.getDate()).padStart(2, '0') + ' ' +
-    String(d.getHours()).padStart(2, '0') + ':' +
-    String(d.getMinutes()).padStart(2, '0') + ':' +
-    String(d.getSeconds()).padStart(2, '0');
+// Helper to ensure date/time is a UTC string in YYYY-MM-DD HH:MM:SS format
+function formatToUTCString(dateInput: Date | string | null | undefined): string {
+  if (!dateInput) return "";
+
+  let d: Date;
+  if (dateInput instanceof Date) {
+    d = dateInput;
+  } else {
+    // Attempt to parse the string as UTC.
+    // Appending 'Z' explicitly treats the string as UTC if it's not already ISO-formatted.
+    d = new Date(dateInput.toString() + 'Z');
+  }
+
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  const hours = String(d.getUTCHours()).padStart(2, '0');
+  const minutes = String(d.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(d.getUTCSeconds()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
 function toPaymentDetails(
@@ -118,8 +124,8 @@ export async function GET(
       `SELECT 
         r.id, r.receipt_number, 
         DATE_FORMAT(r.date, '%Y-%m-%d') as date,
-        r.created_at,
-        r.updated_at,
+        CAST(r.created_at AS CHAR) as created_at,
+        CAST(r.updated_at AS CHAR) as updated_at,
         r.customer_name, r.customer_contact, r.customer_country_code,
         r.payment_type, r.payment_status, r.notes,
         r.total, r.due_total, r.user_id,
@@ -165,10 +171,9 @@ export async function GET(
       receiptId: receipt.id,
       receiptNumber: receipt.receipt_number,
       date: receipt.date,
-      createdAt: formatDatabaseDateToLocal(receipt.created_at),
+      createdAt: formatToUTCString(receipt.created_at),
       updatedAt: receipt.updated_at
-        ? formatDatabaseDateToLocal(receipt.updated_at)
-        : undefined,
+        ? formatToUTCString(receipt.updated_at) : undefined,
       customerName: receipt.customer_name,
       customerContact: receipt.customer_contact,
       customerCountryCode: receipt.customer_country_code,
