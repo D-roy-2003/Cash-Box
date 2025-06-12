@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
-import { pool } from "@/lib/database";
+import { getPool } from "@/lib/database";
 import bcrypt from "bcryptjs";
 
 export async function POST(request: Request) {
@@ -25,17 +25,19 @@ export async function POST(request: Request) {
 
   let connection;
   try {
+    const pool = await getPool();
     connection = await pool.getConnection();
 
-    // Check if user exists with matching email and superkey
+    // Check if user exists with matching email and superkey (case-insensitive)
     const [users] = await connection.query(
-      "SELECT id FROM users WHERE email = ? AND superkey = ? LIMIT 1",
+      "SELECT id FROM users WHERE LOWER(email) = LOWER(?) AND superkey = ? LIMIT 1",
       [email, superkey]
     );
 
     if (!Array.isArray(users) || users.length === 0) {
+      console.log("Password reset attempt failed:", { email, superkey });
       return NextResponse.json(
-        { error: "Invalid email or superkey" },
+        { error: "Invalid email or superkey combination" },
         { status: 401 }
       );
     }
@@ -49,6 +51,7 @@ export async function POST(request: Request) {
       [hashedPassword, user.id]
     );
 
+    console.log("Password reset successful for user:", { userId: user.id, email });
     return NextResponse.json({ 
       success: true,
       message: "Password updated successfully" 
