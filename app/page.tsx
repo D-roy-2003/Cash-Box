@@ -326,7 +326,7 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="flex flex-col items-center justify-center px-4 py-32 min-h-[110vh]">
+      <div className="flex flex-col items-center justify-center px-4 py-32 min-h-[90vh]">
         <div className="max-w-3xl w-full text-center space-y-8">
           <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">
             Cash-Box
