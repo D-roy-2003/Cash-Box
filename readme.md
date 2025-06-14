@@ -70,4 +70,10 @@ npm start
 
 Then, open http://localhost:3000 in your browser.
 
+## 👨‍💼 Project Context
+This platform was built as part of an internship project in collaboration with:
+
+-NASSCOM (National Association of Software and Service Companies)
+-Ministry of Micro, Small & Medium Enterprises(MSME), Government of West Bengal
+
 _Happy budgeting!_
