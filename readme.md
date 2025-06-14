@@ -72,8 +72,9 @@ Then, open http://localhost:3000 in your browser.
 
 ## 👨‍💼 Project Context
 This platform was built as part of an internship project in collaboration with:
+- NASSCOM (National Association of Software and Service Companies)
+- Ministry of Micro, Small & Medium Enterprises(MSME), Government of West Bengal
 
--NASSCOM (National Association of Software and Service Companies)
--Ministry of Micro, Small & Medium Enterprises(MSME), Government of West Bengal
+It aims to empower local artisans by bringing traditional craftsmanship into the digital economy.
 
 _Happy budgeting!_
