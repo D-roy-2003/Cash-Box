@@ -87,11 +87,6 @@ export default function AccountsPage() {
   const notificationRef = useRef<HTMLDivElement | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const transactionsPerPage = 10;
-  const [isClearHistoryDialogOpen, setIsClearHistoryDialogOpen] =
-    useState(false);
-  const [clearHistoryPassword, setClearHistoryPassword] = useState("");
-  const [isClearingHistory, setIsClearingHistory] = useState(false);
-  const [clearHistoryError, setClearHistoryError] = useState("");
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -476,35 +471,6 @@ export default function AccountsPage() {
     setCurrentPage(pageNumber);
   };
 
-  const handleClearHistory = async () => {
-    if (!clearHistoryPassword) {
-      setClearHistoryError("Please enter your password");
-      return;
-    }
-
-    setIsClearingHistory(true);
-    setClearHistoryError("");
-
-    try {
-      // Only clear the frontend display
-      setTransactions([]);
-      setBalance(0);
-      localStorage.setItem("accountTransactions", JSON.stringify([]));
-      localStorage.setItem("accountBalance", "0");
-
-      // Close dialog and reset form
-      setIsClearHistoryDialogOpen(false);
-      setClearHistoryPassword("");
-      setClearHistoryError("");
-    } catch (error: any) {
-      setClearHistoryError(
-        "Failed to clear transaction history display"
-      );
-    } finally {
-      setIsClearingHistory(false);
-    }
-  };
-
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <header className="w-full py-4 px-6 flex justify-between items-center border-b bg-gray-800 text-white">
@@ -773,7 +739,7 @@ export default function AccountsPage() {
                   <DropdownMenuContent align="end" className="w-48">
                     <DropdownMenuItem
                       onClick={() => handleTransaction("credit")}
-                      className="text-green-600 focus:text-green-600 focus:bg-green-50"
+                      className="text-green-700 focus:text-green-700 focus:bg-green-100"
                     >
                       <span className="flex items-center">
                         <span className="mr-2">+</span>
@@ -782,7 +748,7 @@ export default function AccountsPage() {
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => handleTransaction("debit")}
-                      className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                      className="text-red-700 focus:text-red-700 focus:bg-red-100"
                     >
                       <span className="flex items-center">
                         <span className="mr-2">-</span>
@@ -799,13 +765,6 @@ export default function AccountsPage() {
                     <h3 className="text-lg font-medium">Transaction History</h3>
                     <div className="flex space-x-2">
                       <Button
-                        variant="destructive"
-                        onClick={() => setIsClearHistoryDialogOpen(true)}
-                        className="bg-red-600 hover:bg-red-700"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" /> Clear History
-                      </Button>
-                      <Button
                         onClick={exportToExcel}
                         className="bg-blue-600 hover:bg-blue-700"
                       >
@@ -813,65 +772,6 @@ export default function AccountsPage() {
                       </Button>
                     </div>
                   </div>
-
-                  {/* Clear History Dialog */}
-                  <Dialog
-                    open={isClearHistoryDialogOpen}
-                    onOpenChange={setIsClearHistoryDialogOpen}
-                  >
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Clear Transaction History</DialogTitle>
-                        <DialogDescription>
-                          This action will permanently delete all transaction
-                          history. This cannot be undone. Receipts and unpaid
-                          due bills will not be affected.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="py-4">
-                        <div className="space-y-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="password">
-                              Enter your password to confirm
-                            </Label>
-                            <Input
-                              id="password"
-                              type="password"
-                              value={clearHistoryPassword}
-                              onChange={(e) =>
-                                setClearHistoryPassword(e.target.value)
-                              }
-                              placeholder="Enter your password"
-                            />
-                          </div>
-                          {clearHistoryError && (
-                            <p className="text-sm text-red-600">
-                              {clearHistoryError}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setIsClearHistoryDialogOpen(false);
-                            setClearHistoryPassword("");
-                            setClearHistoryError("");
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          onClick={handleClearHistory}
-                          disabled={isClearingHistory}
-                        >
-                          {isClearingHistory ? "Clearing..." : "Clear History"}
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
 
                   <div className="border rounded-lg overflow-hidden hidden md:block">
                     <div className="overflow-x-auto">
