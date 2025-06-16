@@ -9,7 +9,7 @@ interface UserProfile {
   id: string | number;
   superkey: string;
   name: string;
-  email: string;
+  mobile: string;
   createdAt: string;
   storeName: string;
   storeAddress: string;
@@ -97,7 +97,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         id, 
         superkey, 
         name, 
-        email, 
+        store_contact AS mobile, 
         created_at AS createdAt,
         store_name AS storeName, 
         store_address AS storeAddress, 
@@ -117,7 +117,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const user = users[0] as UserProfile;
 
-    const requiredFields = ["id", "superkey", "email"];
+    const requiredFields = ["id", "superkey", "mobile"];
     const missingFields = requiredFields.filter(
       (field) => !user[field as keyof UserProfile]
     );
@@ -245,37 +245,58 @@ export async function PUT(request: Request): Promise<NextResponse> {
     const pool = await getPool();
     connection = await pool.getConnection();
 
-    const [result] = await connection!.query<mysql.OkPacket>(
-      `UPDATE users SET 
-        name = ?, 
-        store_name = ?, 
-        store_address = ?, 
-        store_contact = ?, 
-        store_country_code = ?, 
-        gst_number = ?,
-        profile_photo = ?,
-        profile_complete = ?
-       WHERE id = ?`,
-      [
-        updateData.name,
-        updateData.storeName,
-        updateData.storeAddress,
-        updateData.storeContact,
-        updateData.storeCountryCode,
-        updateData.gstNumber || null,
-        updateData.profilePhoto || null,
-        isProfileComplete ? 1 : 0,
-        userId,
-      ]
+    // Check if the new mobile number is already taken by another user
+    const [existingUsers] = await connection!.query<mysql.RowDataPacket[]>(
+      `SELECT id FROM users WHERE store_contact = ? AND id != ?`,
+      [updateData.storeContact, userId]
     );
 
-    if (result.affectedRows === 0) {
-      return createErrorResponse("User not found or no changes made", 404);
+    if (existingUsers && existingUsers.length > 0) {
+      return createErrorResponse(
+        "This phone number is already registered to another account.",
+        409
+      );
     }
 
-    const [updatedUser] = await connection!.query<mysql.RowDataPacket[]>(
+    // Construct the SQL update query dynamically
+    const updateFields: string[] = [
+      "name = ?",
+      "store_name = ?",
+      "store_address = ?",
+      "store_contact = ?",
+      "store_country_code = ?",
+      "gst_number = ?",
+    ];
+    const updateValues: (string | number | null)[] = [
+      updateData.name,
+      updateData.storeName,
+      updateData.storeAddress,
+      updateData.storeContact,
+      updateData.storeCountryCode,
+      updateData.gstNumber || null, // Ensure null for empty string
+    ];
+
+    // Conditionally add profile_photo to update fields if present in payload
+    if (updateData.profilePhoto !== undefined) { // Check for undefined to know if it was sent by client
+      updateFields.push("profile_photo = ?");
+      updateValues.push(updateData.profilePhoto || null); // Use null if it's an empty string or null
+    }
+
+    updateFields.push("profile_complete = ?");
+    updateValues.push(isProfileComplete ? 1 : 0);
+
+    // Execute the update
+    await connection!.query(
+      `UPDATE users SET ${updateFields.join(", ")} WHERE id = ?`,
+      [...updateValues, userId]
+    );
+
+    // Fetch the updated profile to send back to the frontend
+    const [updatedUsers] = await connection!.query<mysql.RowDataPacket[]>(
       `SELECT 
-        id, superkey, name, email,
+        id, 
+        superkey, 
+        name, 
         created_at AS createdAt,
         store_name AS storeName, 
         store_address AS storeAddress, 
@@ -289,18 +310,45 @@ export async function PUT(request: Request): Promise<NextResponse> {
       [userId]
     );
 
-    if (!updatedUser || updatedUser.length === 0) {
-      return createErrorResponse("Failed to fetch updated profile", 500);
+    if (!updatedUsers || updatedUsers.length === 0) {
+      return createErrorResponse("Updated user not found", 404);
     }
 
-    return NextResponse.json({
-      success: true,
-      updatedProfile: updatedUser[0] as UserProfile,
-      isProfileComplete,
-    });
+    const updatedProfile = updatedUsers[0] as UserProfile;
+
+    return NextResponse.json({ success: true, updatedProfile });
   } catch (error: unknown) {
     console.error("PUT /profile error:", error);
-    return createErrorResponse("Update failed", 500, (error as Error)?.message);
+
+    if ((error as any).code === "ER_DUP_ENTRY") {
+      return createErrorResponse(
+        "Duplicate entry: This phone number is already in use.",
+        409
+      );
+    }
+
+    if (error instanceof Error) {
+      if (error.message.includes("jwt expired")) {
+        return createErrorResponse(
+          "Session expired. Please log in again.",
+          401
+        );
+      }
+
+      if (error.message.includes("database")) {
+        return createErrorResponse(
+          "Database error occurred",
+          503,
+          error.message
+        );
+      }
+    }
+
+    return createErrorResponse(
+      "Internal server error",
+      500,
+      (error as Error)?.message
+    );
   } finally {
     if (connection) {
       try {

@@ -19,7 +19,7 @@ import { ArrowLeft, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,7 +43,7 @@ export default function LoginPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ mobile, password }),
       });
 
       const data = await response.json();
@@ -61,7 +61,7 @@ export default function LoginPage() {
         JSON.stringify({
           id: data.id,
           name: data.name,
-          email: data.email,
+          mobile: data.mobile,
           token: data.token,
         })
       );
@@ -95,7 +95,7 @@ export default function LoginPage() {
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold">Login</CardTitle>
             <CardDescription>
-              Enter your email and password to access your account
+              Enter your mobile number and password to access your account
             </CardDescription>
           </CardHeader>
 
@@ -109,13 +109,15 @@ export default function LoginPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="mobile">Mobile Number</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="mobile"
+                  type="tel"
+                  placeholder="Enter 10-digit mobile number"
+                  value={mobile}
+                  onChange={(e) => setMobile(e.target.value)}
+                  pattern="[0-9]{10}"
+                  maxLength={10}
                   required
                   className="backdrop-blur-sm bg-white/30 border border-gray-200 shadow-sm"
                 />

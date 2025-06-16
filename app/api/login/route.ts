@@ -8,13 +8,13 @@ import { query } from "@/lib/database";
 interface User {
   id: number;
   name: string;
-  email: string;
+  store_contact: string;
   password: string;
   superkey: string;
 }
 
 interface LoginRequest {
-  email: string;
+  mobile: string;
   password: string;
 }
 
@@ -22,7 +22,7 @@ interface LoginResponse {
   id: number;
   superkey: string;
   name: string;
-  email: string;
+  mobile: string;
   token: string;
 }
 
@@ -32,18 +32,18 @@ export async function POST(request: Request) {
     const credentials: LoginRequest = await request.json();
 
     // Input validation
-    if (!credentials.email || !credentials.password) {
+    if (!credentials.mobile || !credentials.password) {
       return NextResponse.json(
-        { error: "Email and password are required" },
+        { error: "Mobile number and password are required" },
         { status: 400 }
       );
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(credentials.email)) {
+    // Validate mobile number format (10 digits)
+    const mobileRegex = /^[0-9]{10}$/;
+    if (!mobileRegex.test(credentials.mobile)) {
       return NextResponse.json(
-        { error: "Invalid email format" },
+        { error: "Invalid mobile number format" },
         { status: 400 }
       );
     }
@@ -59,8 +59,8 @@ export async function POST(request: Request) {
     try {
       // Use the query function from database.js
       const users = (await query(
-        `SELECT id, superkey, name, email, password FROM users WHERE email = ? LIMIT 1`,
-        [credentials.email]
+        `SELECT id, superkey, name, store_contact, password FROM users WHERE store_contact = ? LIMIT 1`,
+        [credentials.mobile]
       )) as User[];
 
       if (users.length === 0) {
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
         id: user.id,
         superkey: user.superkey,
         name: user.name,
-        email: user.email,
+        mobile: user.store_contact,
         token,
       };
 

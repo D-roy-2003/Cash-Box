@@ -1,15 +1,33 @@
 import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
-import { pool } from "@/lib/database";
+import { getPool } from "@/lib/database";
 import bcrypt from "bcryptjs";
 
 export async function POST(request: Request) {
-  const { email, superkey, newPassword } = await request.json();
+  let phoneNumber, superkey, newPassword;
+
+  try {
+    const body = await request.json();
+    phoneNumber = body.phoneNumber;
+    superkey = body.superkey;
+    newPassword = body.newPassword;
+  } catch (parseError) {
+    console.error("Error parsing request body:", parseError);
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
 
   // Validate input
-  if (!email || !superkey || !newPassword) {
+  if (!phoneNumber || !superkey || !newPassword) {
     return NextResponse.json(
-      { error: "Email, superkey, and new password are required" },
+      { error: "Phone number, superkey, and new password are required" },
+      { status: 400 }
+    );
+  }
+
+  // Validate phone number format
+  if (!/^[0-9]{10}$/.test(phoneNumber)) {
+    return NextResponse.json(
+      { error: "Invalid phone number format. Please enter a 10-digit number" },
       { status: 400 }
     );
   }
@@ -25,17 +43,18 @@ export async function POST(request: Request) {
 
   let connection;
   try {
+    const pool = await getPool();
     connection = await pool.getConnection();
 
-    // Check if user exists with matching email and superkey
+    // Check if user exists with matching phone number and superkey
     const [users] = await connection.query(
-      "SELECT id FROM users WHERE email = ? AND superkey = ? LIMIT 1",
-      [email, superkey]
+      "SELECT id FROM users WHERE store_contact = ? AND superkey = ? LIMIT 1",
+      [phoneNumber, superkey]
     );
 
     if (!Array.isArray(users) || users.length === 0) {
       return NextResponse.json(
-        { error: "Invalid email or superkey" },
+        { error: "Invalid phone number or superkey" },
         { status: 401 }
       );
     }
@@ -59,4 +78,4 @@ export async function POST(request: Request) {
   } finally {
     if (connection) connection.release();
   }
-}
+} 

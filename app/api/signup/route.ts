@@ -6,8 +6,9 @@ import type { ResultSetHeader } from "mysql2/promise";
 
 interface UserData {
   name: string;
-  email: string;
+  mobile: string;
   password: string;
+  superkey: string;
 }
 
 function generateSuperkey(): string {
@@ -29,16 +30,25 @@ export async function POST(request: Request) {
   }
 
   // Extract and validate request body
-  const { name, email, password } = (await request.json()) as Partial<UserData>;
-  if (!name?.trim() || !email?.trim() || !password) {
+  const { name, mobile, password, superkey } = (await request.json()) as Partial<UserData>;
+  if (!name?.trim() || !mobile?.trim() || !password || !superkey) {
     return NextResponse.json(
-      { error: "Missing required fields (name, email, password)" },
+      { error: "Missing required fields (name, mobile number, password)" },
+      { status: 400 }
+    );
+  }
+
+  // Validate mobile number format
+  const mobileRegex = /^[0-9]{10}$/;
+  if (!mobileRegex.test(mobile)) {
+    return NextResponse.json(
+      { error: "Invalid mobile number format" },
       { status: 400 }
     );
   }
 
   const trimmedName = name.trim();
-  const trimmedEmail = email.trim();
+  const trimmedMobile = mobile.trim();
   const hashedPassword = await bcrypt.hash(password, 10);
 
   let connection;
@@ -50,13 +60,13 @@ export async function POST(request: Request) {
 
     const maxAttempts = 10;
     for (let attempts = 0; attempts < maxAttempts; attempts++) {
-      const superkey = generateSuperkey();
+      const currentSuperkey = superkey || generateSuperkey();
 
       try {
         const [rawResult] = await connection.execute(
-          `INSERT INTO users (name, email, password, superkey)
+          `INSERT INTO users (name, store_contact, password, superkey)
            VALUES (?, ?, ?, ?)`,
-          [trimmedName, trimmedEmail, hashedPassword, superkey]
+          [trimmedName, trimmedMobile, hashedPassword, currentSuperkey]
         );
 
         const result = rawResult as ResultSetHeader;
@@ -64,14 +74,14 @@ export async function POST(request: Request) {
         if (result.affectedRows === 1) {
           await connection.commit();
 
-          const token = await signJwt(result.insertId);
+          const token = await signJwt(result.insertId.toString());
 
           return NextResponse.json(
             {
               id: result.insertId,
               name: trimmedName,
-              email: trimmedEmail,
-              superkey,
+              mobile: trimmedMobile,
+              superkey: currentSuperkey,
               token,
             },
             { status: 201 }
@@ -83,10 +93,10 @@ export async function POST(request: Request) {
             // Retry on superkey conflict
             continue;
           }
-          if (error.message.includes("email")) {
+          if (error.message.includes("store_contact")) {
             await connection.rollback();
             return NextResponse.json(
-              { error: "Email already exists" },
+              { error: "Mobile number already exists" },
               { status: 409 }
             );
           }

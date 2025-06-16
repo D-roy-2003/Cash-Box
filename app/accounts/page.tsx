@@ -73,6 +73,7 @@ export default function AccountsPage() {
   const router = useRouter();
   const [particulars, setParticulars] = useState("");
   const [amount, setAmount] = useState("");
+  const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
   const [balance, setBalance] = useState(0);
   const [totalDueBalance, setTotalDueBalance] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -282,10 +283,11 @@ export default function AccountsPage() {
     if (
       !particulars ||
       !amount ||
+      !transactionDate ||
       isNaN(Number.parseFloat(amount)) ||
       Number.parseFloat(amount) <= 0
     ) {
-      alert("Please enter valid particulars and amount");
+      alert("Please enter valid particulars, amount, and date");
       return;
     }
 
@@ -309,6 +311,7 @@ export default function AccountsPage() {
           particulars,
           amount: amountValue,
           type,
+          transactionDate,
         }),
       });
 
@@ -326,6 +329,7 @@ export default function AccountsPage() {
       saveData(newTransactions, newBalance);
       setParticulars("");
       setAmount("");
+      setTransactionDate(new Date().toISOString().split('T')[0]);
     } catch (error) {
       console.error(`Failed to create ${type} transaction:`, error);
       alert(`Failed to create ${type} transaction`);
@@ -352,13 +356,15 @@ export default function AccountsPage() {
       return;
     }
 
-    // Sort transactions by date (newest first) for export
-    const sortedTransactions = [...transactions].sort((a, b) => {
-      return new Date(b.date).getTime() - new Date(a.date).getTime();
+    // Create a new array and sort from oldest to newest for export
+    const exportTransactions = [...transactions].sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return dateA - dateB; // Oldest first
     });
 
     let runningBalance = 0;
-    const dataToExport = sortedTransactions.map((transaction) => {
+    const dataToExport = exportTransactions.map((transaction) => {
       runningBalance =
         transaction.type === "credit"
           ? runningBalance + transaction.amount
@@ -438,19 +444,19 @@ export default function AccountsPage() {
     }
   };
 
-  // Sort transactions by date (newest first)
-  const sortedTransactions = [...transactions].sort((a, b) => {
-    return new Date(b.date).getTime() - new Date(a.date).getTime();
+  // Sort transactions by date (oldest first) for display
+  const displayTransactions = [...transactions].sort((a, b) => {
+    return new Date(a.date).getTime() - new Date(b.date).getTime();
   });
 
   // Calculate pagination
   const indexOfLastTransaction = currentPage * transactionsPerPage;
   const indexOfFirstTransaction = indexOfLastTransaction - transactionsPerPage;
-  const currentTransactions = sortedTransactions.slice(
+  const currentTransactions = displayTransactions.slice(
     indexOfFirstTransaction,
     indexOfLastTransaction
   );
-  const totalPages = Math.ceil(sortedTransactions.length / transactionsPerPage);
+  const totalPages = Math.ceil(displayTransactions.length / transactionsPerPage);
 
   const handlePageChange = (pageNumber: number) => {
     setCurrentPage(pageNumber);
@@ -748,18 +754,40 @@ export default function AccountsPage() {
                   placeholder="Amount"
                   className="flex-1 border px-4 py-2 rounded-md"
                 />
-                <Button
-                  onClick={() => handleTransaction("credit")}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  Add Credit
-                </Button>
-                <Button
-                  onClick={() => handleTransaction("debit")}
-                  className="bg-red-600 hover:bg-red-700"
-                >
-                  Add Debit
-                </Button>
+                <input
+                  type="date"
+                  value={transactionDate}
+                  onChange={(e) => setTransactionDate(e.target.value)}
+                  className="flex-1 border px-4 py-2 rounded-md"
+                  max={new Date().toISOString().split('T')[0]}
+                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button className="bg-blue-600 hover:bg-blue-700">
+                      Add Transaction
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem
+                      onClick={() => handleTransaction("credit")}
+                      className="text-green-600 focus:text-green-600 focus:bg-green-50"
+                    >
+                      <span className="flex items-center">
+                        <span className="mr-2">+</span>
+                        Deposit
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => handleTransaction("debit")}
+                      className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                    >
+                      <span className="flex items-center">
+                        <span className="mr-2">-</span>
+                        Withdraw
+                      </span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               {transactions.length > 0 && (
@@ -868,7 +896,7 @@ export default function AccountsPage() {
                           {currentTransactions.map((transaction) => (
                             <tr key={transaction.id}>
                               <td className="px-6 py-4 text-sm text-gray-500">
-                                {formatDate(transaction.date)}
+                                {formatDateOnly(transaction.date)}
                               </td>
                               <td className="px-6 py-4 text-sm text-gray-900">
                                 {transaction.particulars}
@@ -910,9 +938,9 @@ export default function AccountsPage() {
                           Showing {indexOfFirstTransaction + 1} to{" "}
                           {Math.min(
                             indexOfLastTransaction,
-                            sortedTransactions.length
+                            displayTransactions.length
                           )}{" "}
-                          of {sortedTransactions.length} transactions
+                          of {displayTransactions.length} transactions
                         </div>
                         <div className="flex space-x-2">
                           <Button
@@ -979,7 +1007,7 @@ export default function AccountsPage() {
                           </span>
                         </div>
                         <div className="flex justify-between items-center text-xs text-gray-500">
-                          <span>{formatDate(transaction.date)}</span>
+                          <span>{formatDateOnly(transaction.date)}</span>
                           <span
                             className={`px-2 py-1 rounded-full ${
                               transaction.type === "credit"

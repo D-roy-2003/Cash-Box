@@ -26,15 +26,23 @@ export async function GET(request: Request) {
     const [rows] = await connection!.execute(
       `
       SELECT 
-        id,
-        receipt_number AS receiptNumber,
-        date,
-        customer_name AS customerName,
-        CAST(total AS DECIMAL(10,2)) AS total,
-        payment_status AS paymentStatus
-      FROM receipts
-      WHERE user_id = ?
-      ORDER BY date DESC
+        r.id,
+        r.receipt_number AS receiptNumber,
+        r.date,
+        r.customer_name AS customerName,
+        CAST(r.total AS DECIMAL(10,2)) AS total,
+        r.payment_status AS paymentStatus,
+        CASE 
+          WHEN r.payment_status = 'due' AND EXISTS (
+            SELECT 1 FROM due_records d 
+            WHERE d.receipt_number = r.receipt_number 
+            AND d.is_paid = TRUE
+          ) THEN 'due_paid'
+          ELSE r.payment_status 
+        END AS displayStatus
+      FROM receipts r
+      WHERE r.user_id = ?
+      ORDER BY r.date DESC
     `,
       [userId]
     );

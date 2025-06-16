@@ -357,6 +357,11 @@ export default function ProfilePage() {
         gstNumber: gstNumber || null,
       };
 
+      // If no new file is selected, but an existing photo is present, include it in the payload
+      if (!selectedFile && profilePhoto) {
+        updatePayload.profilePhoto = profilePhoto;
+      }
+
       // Handle profile photo upload if a new file was selected
       if (selectedFile) {
         try {
@@ -369,8 +374,8 @@ export default function ProfilePage() {
           setLoading(false);
           return;
         }
-      } else if (profilePhoto === null) {
-        // Explicitly set to null if user removed the photo
+      } else if (profilePhoto === null && !selectedFile) {
+        // Explicitly set to null if user removed the photo and no new file was selected
         updatePayload.profilePhoto = null;
       }
 
@@ -752,7 +757,7 @@ export default function ProfilePage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="storeContact">Store Contact Number *</Label>
+                    <Label htmlFor="storeContact">Store Contact Number * (This will be used to login to your account)</Label>
                     <PhoneInput
                       value={storeContact}
                       countryCode={storeCountryCode}

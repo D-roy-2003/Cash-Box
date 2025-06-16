@@ -20,6 +20,7 @@ interface Receipt {
   customerName: string
   total: number | string
   paymentStatus: "full" | "advance" | "due"
+  displayStatus: "full" | "advance" | "due" | "due_paid"
 }
 
 export default function ViewReceipts() {
@@ -28,8 +29,10 @@ export default function ViewReceipts() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState<"all" | "full" | "advance" | "due">("all")
+  const [statusFilter, setStatusFilter] = useState<"all" | "full" | "advance" | "due" | "due_paid">("all")
   const [isSearching, setIsSearching] = useState(false)
+  const [selectedYear, setSelectedYear] = useState<string>("all")
+  const [selectedMonth, setSelectedMonth] = useState<string>("all")
 
   useEffect(() => {
     const checkAuthAndFetchReceipts = async () => {
@@ -113,18 +116,26 @@ export default function ViewReceipts() {
         receipt.receiptNumber || "",
         receipt.customerName || "",
         receipt.total?.toString() || "",
-        receipt.paymentStatus || ""
+        receipt.displayStatus || ""
       ]
 
       const matchesSearch = fieldsToSearch.some(field => 
         field.toLowerCase().includes(lowerCaseSearchTerm))
       
       const matchesStatus = 
-        statusFilter === "all" || receipt.paymentStatus === statusFilter
+        statusFilter === "all" || receipt.displayStatus === statusFilter
+
+      // Date filtering logic
+      const receiptDate = new Date(receipt.date);
+      const receiptYear = receiptDate.getFullYear().toString();
+      const receiptMonth = (receiptDate.getMonth() + 1).toString().padStart(2, '0');
+
+      const matchesYear = selectedYear === "all" || receiptYear === selectedYear;
+      const matchesMonth = selectedMonth === "all" || receiptMonth === selectedMonth;
       
-      return matchesSearch && matchesStatus
+      return matchesSearch && matchesStatus && matchesYear && matchesMonth;
     })
-  }, [receipts, searchTerm, statusFilter])
+  }, [receipts, searchTerm, statusFilter, selectedYear, selectedMonth])
 
   const formatCurrency = (value: number | string): string => {
     // If it's already a number, format it directly
@@ -213,13 +224,61 @@ export default function ViewReceipts() {
           </div>
         </div>
         
+        {/* Year Filter */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="flex items-center gap-2">
+              <Filter className="h-4 w-4" />
+              {selectedYear === "all" ? "All Years" : `Year: ${selectedYear}`}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-48">
+            <DropdownMenuRadioGroup 
+              value={selectedYear} 
+              onValueChange={setSelectedYear}
+            >
+              <DropdownMenuRadioItem value="all">All Years</DropdownMenuRadioItem>
+              {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                <DropdownMenuRadioItem key={year} value={year.toString()}>
+                  {year}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Month Filter */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="flex items-center gap-2">
+              <Filter className="h-4 w-4" />
+              {selectedMonth === "all" ? "All Months" : 
+                new Date(2000, parseInt(selectedMonth) - 1, 1).toLocaleString('en-US', { month: 'long' })}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-48">
+            <DropdownMenuRadioGroup 
+              value={selectedMonth} 
+              onValueChange={setSelectedMonth}
+            >
+              <DropdownMenuRadioItem value="all">All Months</DropdownMenuRadioItem>
+              {Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0')).map(month => (
+                <DropdownMenuRadioItem key={month} value={month}>
+                  {new Date(2000, parseInt(month) - 1, 1).toLocaleString('en-US', { month: 'long' })}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="flex items-center gap-2">
               <Filter className="h-4 w-4" />
               {statusFilter === "all" ? "All Statuses" : 
                statusFilter === "full" ? "Full payment" :
-               statusFilter === "advance" ? "Advance Payment" : "Due Payment"}
+               statusFilter === "advance" ? "Advance Payment" :
+               statusFilter === "due_paid" ? "Due Paid" : "Due Payment"}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56">
@@ -231,6 +290,7 @@ export default function ViewReceipts() {
               <DropdownMenuRadioItem value="full">Full payment</DropdownMenuRadioItem>
               <DropdownMenuRadioItem value="advance">Advance payment</DropdownMenuRadioItem>
               <DropdownMenuRadioItem value="due">Due payment</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="due_paid">Due Paid</DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -290,20 +350,20 @@ export default function ViewReceipts() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <span
                       className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        receipt.paymentStatus === "full"
+                        receipt.displayStatus === "full"
                           ? "bg-green-100 text-green-800"
-                          : receipt.paymentStatus === "advance"
+                          : receipt.displayStatus === "advance"
                           ? "bg-yellow-100 text-yellow-800"
-                          : receipt.paymentStatus === "due" && Number(receipt.total) === 0
+                          : receipt.displayStatus === "due_paid"
                           ? "bg-green-100 text-green-800"
                           : "bg-red-100 text-red-800"
                       }`}
                     >
-                      {receipt.paymentStatus === "full"
-                        ? "full payment"
-                        : receipt.paymentStatus === "advance"
+                      {receipt.displayStatus === "full"
+                        ? "Full payment"
+                        : receipt.displayStatus === "advance"
                         ? "Advance payment"
-                        : receipt.paymentStatus === "due" && Number(receipt.total) === 0
+                        : receipt.displayStatus === "due_paid"
                         ? "Due Paid"
                         : "Due payment"}
                     </span>

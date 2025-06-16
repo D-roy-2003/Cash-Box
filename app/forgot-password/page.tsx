@@ -19,7 +19,7 @@ import { AlertCircle, ArrowLeft, CheckCircle } from "lucide-react";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [superkey, setSuperkey] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState("");
@@ -38,7 +38,7 @@ const handleSubmit = async (e: React.FormEvent) => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ email, superkey, newPassword }),
+      body: JSON.stringify({ phoneNumber, superkey, newPassword }),
     });
 
     // First check if the response is JSON
@@ -90,7 +90,7 @@ const handleSubmit = async (e: React.FormEvent) => {
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold">Reset Password</CardTitle>
             <CardDescription>
-              Enter your email, superkey, and new password
+              Enter your phone number, superkey, and new password
             </CardDescription>
           </CardHeader>
 
@@ -98,7 +98,7 @@ const handleSubmit = async (e: React.FormEvent) => {
             {error && (
               <Alert variant="destructive" className="mb-4">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription>{error === "Email, superkey, and new password are required" ? "Phone number, superkey, and new password are required" : error}</AlertDescription>
               </Alert>
             )}
 
@@ -111,14 +111,16 @@ const handleSubmit = async (e: React.FormEvent) => {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="phoneNumber">Phone Number</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="phoneNumber"
+                  type="tel"
+                  placeholder="Enter your phone number"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
                   required
+                  pattern="[0-9]{10}"
+                  title="Please enter a valid 10-digit phone number"
                 />
               </div>
 

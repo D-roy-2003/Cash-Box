@@ -46,12 +46,12 @@ export async function GET(request: Request) {
         t.particulars, 
         t.amount, 
         t.type, 
-        t.created_at as date,
+        t.transaction_date as date,
         r.receipt_number as receiptNumber
        FROM account_transactions t
        LEFT JOIN receipts r ON t.receipt_id = r.id
        WHERE t.user_id = ?
-       ORDER BY t.created_at DESC`,
+       ORDER BY t.transaction_date DESC, t.created_at DESC`,
       [userId]
     );
 
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
 
   try {
     const { userId } = await verifyToken(request);
-    const { particulars, amount, type } = await request.json();
+    const { particulars, amount, type, transactionDate } = await request.json();
 
     // Validate input
     if (
@@ -156,15 +156,23 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate transaction date
+    if (!transactionDate || !isValidDate(transactionDate)) {
+      return NextResponse.json(
+        { error: "Valid transaction date is required" },
+        { status: 400 }
+      );
+    }
+
     const pool = await getPool();
     connection = await pool.getConnection();
 
-    // Insert the new transaction
+    // Insert the new transaction with the provided date
     const [result] = await connection!.query<mysql.ResultSetHeader>(
       `INSERT INTO account_transactions 
-       (particulars, amount, type, user_id, created_at)
-       VALUES (?, ?, ?, ?, NOW())`,
-      [particulars.trim(), amount, type, userId]
+       (particulars, amount, type, user_id, transaction_date, created_at)
+       VALUES (?, ?, ?, ?, ?, NOW())`,
+      [particulars.trim(), amount, type, userId, transactionDate]
     );
 
     if (result.affectedRows === 0) {
@@ -178,7 +186,7 @@ export async function POST(request: Request) {
         t.particulars, 
         t.amount, 
         t.type, 
-        t.created_at as date,
+        t.transaction_date as date,
         r.receipt_number as receiptNumber
        FROM account_transactions t
        LEFT JOIN receipts r ON t.receipt_id = r.id
@@ -226,4 +234,10 @@ export async function POST(request: Request) {
       }
     }
   }
+}
+
+// Helper function to validate date format
+function isValidDate(dateString: string): boolean {
+  const date = new Date(dateString);
+  return date instanceof Date && !isNaN(date.getTime());
 }

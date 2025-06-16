@@ -30,7 +30,7 @@ export default function SignupPage() {
   const router = useRouter();
   const [formData, setFormData] = useState({
     name: "",
-    email: "",
+    mobile: "",
     password: "",
     confirmPassword: "",
   });
@@ -59,26 +59,34 @@ export default function SignupPage() {
     setError("");
     setLoading(true);
 
-    const { name, email, password, confirmPassword } = formData;
+    const { name, mobile, password, confirmPassword } = formData;
 
     // Debug: Log form values
     console.log("Current form values:", {
       name,
-      email,
+      mobile,
       password: password ? "*****" : "empty",
       confirmPassword: confirmPassword ? "*****" : "empty"
     });
 
     // Validation
-    if (!name?.trim() || !email?.trim() || !password || !confirmPassword) {
+    if (!name?.trim() || !mobile?.trim() || !password || !confirmPassword) {
       const missingFields = [];
       if (!name?.trim()) missingFields.push("name");
-      if (!email?.trim()) missingFields.push("email");
+      if (!mobile?.trim()) missingFields.push("mobile number");
       if (!password) missingFields.push("password");
       if (!confirmPassword) missingFields.push("confirmPassword");
       
       console.error("Missing fields:", missingFields);
       setError(`Missing required fields: ${missingFields.join(", ")}`);
+      setLoading(false);
+      return;
+    }
+
+    // Validate mobile number format
+    const mobileRegex = /^[0-9]{10}$/;
+    if (!mobileRegex.test(mobile)) {
+      setError("Please enter a valid 10-digit mobile number");
       setLoading(false);
       return;
     }
@@ -105,7 +113,7 @@ export default function SignupPage() {
 
       const payload = {
         name: name.trim(),
-        email: email.trim(),
+        mobile: mobile.trim(),
         password: password,
         superkey: superkey
       };
@@ -113,7 +121,7 @@ export default function SignupPage() {
       console.log("Final payload being sent:", payload);
 
       // Verify payload before sending
-      if (!payload.name || !payload.email || !payload.password || !payload.superkey) {
+      if (!payload.name || !payload.mobile || !payload.password || !payload.superkey) {
         throw new Error("Payload validation failed - missing fields");
       }
 
@@ -137,7 +145,7 @@ export default function SignupPage() {
       console.log("Signup successful, user data:", {
         id: data.id,
         name: data.name,
-        email: data.email,
+        mobile: data.mobile,
         hasSuperkey: !!data.superkey
       });
 
@@ -146,7 +154,7 @@ export default function SignupPage() {
         JSON.stringify({
           id: data.id,
           name: data.name,
-          email: data.email,
+          mobile: data.mobile,
           token: data.token,
         })
       );
@@ -209,13 +217,15 @@ export default function SignupPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="mobile">Mobile Number</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="name@example.com"
-                  value={formData.email}
+                  id="mobile"
+                  type="tel"
+                  placeholder="Enter 10-digit mobile number"
+                  value={formData.mobile}
                   onChange={handleChange}
+                  pattern="[0-9]{10}"
+                  maxLength={10}
                   required
                 />
               </div>
