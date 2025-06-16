@@ -472,31 +472,7 @@ export default function AccountsPage() {
     setClearHistoryError("");
 
     try {
-      const userJSON = localStorage.getItem("currentUser");
-      if (!userJSON) {
-        router.push("/login");
-        return;
-      }
-
-      const userData = JSON.parse(userJSON);
-
-      const response = await fetch("/api/transactions/clear", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${userData.token}`,
-        },
-        body: JSON.stringify({
-          password: clearHistoryPassword,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to clear transaction history");
-      }
-
-      // Clear local state
+      // Only clear the frontend display
       setTransactions([]);
       setBalance(0);
       localStorage.setItem("accountTransactions", JSON.stringify([]));
@@ -508,7 +484,7 @@ export default function AccountsPage() {
       setClearHistoryError("");
     } catch (error: any) {
       setClearHistoryError(
-        error.message || "Failed to clear transaction history"
+        "Failed to clear transaction history display"
       );
     } finally {
       setIsClearingHistory(false);
@@ -699,7 +675,14 @@ export default function AccountsPage() {
 
           <Card className="max-w-4xl mx-auto">
             <CardHeader>
-              <CardTitle className="text-2xl">Accounts</CardTitle>
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-2xl">Accounts</CardTitle>
+                <Link href="/report">
+                  <Button className="bg-blue-600 hover:bg-blue-700">
+                    Report
+                  </Button>
+                </Link>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -884,9 +867,6 @@ export default function AccountsPage() {
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Type
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Receipt
-                            </th>
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Amount
                             </th>
@@ -912,9 +892,6 @@ export default function AccountsPage() {
                                   {transaction.type.charAt(0).toUpperCase() +
                                     transaction.type.slice(1)}
                                 </span>
-                              </td>
-                              <td className="px-6 py-4 text-sm text-gray-500">
-                                {transaction.receiptNumber || "-"}
                               </td>
                               <td className="px-6 py-4 text-sm text-right font-medium">
                                 <span
@@ -1019,11 +996,6 @@ export default function AccountsPage() {
                               transaction.type.slice(1)}
                           </span>
                         </div>
-                        {transaction.receiptNumber && (
-                          <div className="mt-2 text-xs text-gray-500">
-                            Receipt: {transaction.receiptNumber}
-                          </div>
-                        )}
                       </div>
                     ))}
                   </div>
