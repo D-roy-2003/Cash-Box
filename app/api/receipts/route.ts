@@ -357,14 +357,15 @@ async function processAccountTransaction(
   connection: mysql.PoolConnection,
   receiptId: number,
   body: ReceiptBody,
-  userId: string
+  userId: string,
+  receiptDate: string
 ): Promise<void> {
   if (body.paymentStatus === "due") return;
 
   console.log("Processing account transaction for receipt ID:", receiptId);
 
   try {
-    const createdAt = formatLocalDateForMySQL(new Date());
+    const transactionDate = formatDateOnlyForMySQL(receiptDate);
     let transactionAmount = 0;
     let particulars = "";
 
@@ -379,9 +380,9 @@ async function processAccountTransaction(
     if (transactionAmount > 0) {
       await connection.query(
         `INSERT INTO account_transactions (
-          particulars, amount, type, user_id, receipt_id, created_at
+          particulars, amount, type, user_id, receipt_id, transaction_date
         ) VALUES (?, ?, ?, ?, ?, ?)`,
-        [particulars, transactionAmount, "credit", userId, receiptId, createdAt]
+        [particulars, transactionAmount, "credit", userId, receiptId, transactionDate]
       );
       console.log("Account transaction processed successfully");
     }
@@ -463,7 +464,7 @@ export async function POST(request: Request) {
     }
 
     // Always process the account transaction for full/advance payments
-    await processAccountTransaction(connection!, receiptId, body, userId);
+    await processAccountTransaction(connection!, receiptId, body, userId, body.date);
 
     await connection!.commit();
     console.log("Transaction committed successfully");

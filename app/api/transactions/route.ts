@@ -10,6 +10,7 @@ interface Transaction {
   type: "credit" | "debit";
   date: string;
   receiptNumber?: string;
+  createdAt: string;
 }
 
 interface JwtPayload {
@@ -47,6 +48,7 @@ export async function GET(request: Request) {
         t.amount, 
         t.type, 
         t.transaction_date as date,
+        t.created_at as createdAt,
         r.receipt_number as receiptNumber
        FROM account_transactions t
        LEFT JOIN receipts r ON t.receipt_id = r.id
@@ -62,6 +64,7 @@ export async function GET(request: Request) {
       type: row.type === "credit" ? "credit" : "debit",
       date: row.date || new Date().toISOString(),
       receiptNumber: row.receiptNumber || undefined,
+      createdAt: row.createdAt || new Date().toISOString(),
     }));
 
     // Calculate current account balance from transactions
@@ -187,6 +190,7 @@ export async function POST(request: Request) {
         t.amount, 
         t.type, 
         t.transaction_date as date,
+        t.created_at as createdAt,
         r.receipt_number as receiptNumber
        FROM account_transactions t
        LEFT JOIN receipts r ON t.receipt_id = r.id
@@ -206,6 +210,7 @@ export async function POST(request: Request) {
           type: transaction.type,
           date: transaction.date,
           receiptNumber: transaction.receiptNumber || undefined,
+          createdAt: transaction.createdAt || new Date().toISOString(),
         },
       },
       { status: 201 }

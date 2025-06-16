@@ -45,6 +45,7 @@ interface Transaction {
   type: "credit" | "debit";
   date: string;
   receiptNumber?: string;
+  createdAt: string;
 }
 
 interface DueRecord {
@@ -73,13 +74,7 @@ export default function AccountsPage() {
   const router = useRouter();
   const [particulars, setParticulars] = useState("");
   const [amount, setAmount] = useState("");
-  const [transactionDate, setTransactionDate] = useState(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  });
+  const [transactionDate, setTransactionDate] = useState("");
   const [balance, setBalance] = useState(0);
   const [totalDueBalance, setTotalDueBalance] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -335,13 +330,7 @@ export default function AccountsPage() {
       saveData(newTransactions, newBalance);
       setParticulars("");
       setAmount("");
-      
-      // Reset date to current date after successful transaction
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      setTransactionDate(`${year}-${month}-${day}`);
+      setTransactionDate("");
     } catch (error) {
       console.error(`Failed to create ${type} transaction:`, error);
       alert(`Failed to create ${type} transaction`);
@@ -458,7 +447,15 @@ export default function AccountsPage() {
 
   // Sort transactions by date (oldest first) for display
   const displayTransactions = [...transactions].sort((a, b) => {
-    return new Date(a.date).getTime() - new Date(b.date).getTime();
+    const dateA = new Date(a.date).getTime();
+    const dateB = new Date(b.date).getTime();
+
+    // If dates are the same, sort by createdAt (oldest first)
+    if (dateA === dateB) {
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    }
+
+    return dateA - dateB;
   });
 
   // Calculate pagination
@@ -502,25 +499,6 @@ export default function AccountsPage() {
       setIsClearingHistory(false);
     }
   };
-
-  // Add useEffect to update date when component mounts
-  useEffect(() => {
-    const updateDate = () => {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      setTransactionDate(`${year}-${month}-${day}`);
-    };
-
-    // Update date immediately
-    updateDate();
-
-    // Update date every minute to ensure it stays current
-    const interval = setInterval(updateDate, 60000);
-
-    return () => clearInterval(interval);
-  }, []);
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
