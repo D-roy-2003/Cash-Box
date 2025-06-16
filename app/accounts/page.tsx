@@ -73,7 +73,13 @@ export default function AccountsPage() {
   const router = useRouter();
   const [particulars, setParticulars] = useState("");
   const [amount, setAmount] = useState("");
-  const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [transactionDate, setTransactionDate] = useState(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
   const [balance, setBalance] = useState(0);
   const [totalDueBalance, setTotalDueBalance] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -329,7 +335,13 @@ export default function AccountsPage() {
       saveData(newTransactions, newBalance);
       setParticulars("");
       setAmount("");
-      setTransactionDate(new Date().toISOString().split('T')[0]);
+      
+      // Reset date to current date after successful transaction
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      setTransactionDate(`${year}-${month}-${day}`);
     } catch (error) {
       console.error(`Failed to create ${type} transaction:`, error);
       alert(`Failed to create ${type} transaction`);
@@ -490,6 +502,25 @@ export default function AccountsPage() {
       setIsClearingHistory(false);
     }
   };
+
+  // Add useEffect to update date when component mounts
+  useEffect(() => {
+    const updateDate = () => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      setTransactionDate(`${year}-${month}-${day}`);
+    };
+
+    // Update date immediately
+    updateDate();
+
+    // Update date every minute to ensure it stays current
+    const interval = setInterval(updateDate, 60000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
@@ -742,7 +773,13 @@ export default function AccountsPage() {
                   value={transactionDate}
                   onChange={(e) => setTransactionDate(e.target.value)}
                   className="flex-1 border px-4 py-2 rounded-md"
-                  max={new Date().toISOString().split('T')[0]}
+                  max={(() => {
+                    const now = new Date();
+                    const year = now.getFullYear();
+                    const month = String(now.getMonth() + 1).padStart(2, '0');
+                    const day = String(now.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                  })()}
                 />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

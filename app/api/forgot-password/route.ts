@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import mysql from "mysql2/promise";
-import { getPool } from "@/lib/database";
+import { query } from "@/lib/database";
 import bcrypt from "bcryptjs";
 
 export async function POST(request: Request) {
@@ -41,13 +40,9 @@ export async function POST(request: Request) {
     );
   }
 
-  let connection;
   try {
-    const pool = await getPool();
-    connection = await pool.getConnection();
-
     // Check if user exists with matching phone number and superkey
-    const [users] = await connection.query(
+    const users = await query(
       "SELECT id FROM users WHERE store_contact = ? AND superkey = ? LIMIT 1",
       [phoneNumber, superkey]
     );
@@ -63,19 +58,27 @@ export async function POST(request: Request) {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     // Update password
-    await connection.query(
+    await query(
       "UPDATE users SET password = ? WHERE id = ?",
       [hashedPassword, user.id]
     );
 
-    return NextResponse.json({ success: true });
-  } catch (error) {
+    return NextResponse.json({ 
+      success: true,
+      message: "Password reset successfully. You can now login with your new password." 
+    });
+  } catch (error: any) {
     console.error("Forgot password error:", error);
+    // Check if the error is due to duplicate entry
+    if (error.code === 'ER_DUP_ENTRY') {
+      return NextResponse.json(
+        { error: "This phone number is already registered" },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
-      { error: "An error occurred while resetting password" },
+      { error: "An error occurred while resetting password. Please try again." },
       { status: 500 }
     );
-  } finally {
-    if (connection) connection.release();
   }
 } 

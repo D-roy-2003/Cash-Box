@@ -33,7 +33,7 @@ const handleSubmit = async (e: React.FormEvent) => {
   setSuccess("");
 
   try {
-    const response = await fetch('/api/auth/forgot-password', {
+    const response = await fetch('/api/forgot-password', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -41,30 +41,22 @@ const handleSubmit = async (e: React.FormEvent) => {
       body: JSON.stringify({ phoneNumber, superkey, newPassword }),
     });
 
-    // First check if the response is JSON
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      const text = await response.text();
-      throw new Error(text || 'Invalid response from server');
-    }
-
     const data = await response.json();
 
     if (!response.ok) {
       throw new Error(data.error || 'Password reset failed');
     }
 
-    setSuccess("Password reset successfully! Redirecting to login...");
+    setSuccess(data.message || "Password reset successfully! Redirecting to login...");
+    setPhoneNumber("");
+    setSuperkey("");
+    setNewPassword("");
     setTimeout(() => {
       router.push("/login");
     }, 2000);
   } catch (err: any) {
-    // Handle HTML error responses
-    if (err.message.includes('<!DOCTYPE html>')) {
-      setError("Server error occurred. Please try again later.");
-    } else {
-      setError(err.message || "An error occurred while resetting password");
-    }
+    console.error("Password reset error:", err);
+    setError(err.message || "An error occurred while resetting password");
   } finally {
     setLoading(false);
   }
