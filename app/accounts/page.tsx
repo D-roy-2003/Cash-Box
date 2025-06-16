@@ -361,7 +361,12 @@ export default function AccountsPage() {
     const exportTransactions = [...transactions].sort((a, b) => {
       const dateA = new Date(a.date).getTime();
       const dateB = new Date(b.date).getTime();
-      return dateA - dateB; // Oldest first
+
+      // If dates are the same, sort by createdAt (oldest first)
+      if (dateA === dateB) {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }
+      return dateA - dateB;
     });
 
     let runningBalance = 0;

@@ -23,6 +23,7 @@ interface Transaction {
   type: "credit" | "debit";
   date: string;
   receiptNumber?: string;
+  createdAt: string;
   details?: {
     credit: number;
     debit: number;
@@ -135,31 +136,11 @@ export default function ReportPage() {
   };
 
   const getDateInputMin = () => {
-    const date = new Date();
-    switch (filterType) {
-      case "year":
-        return "2000";
-      case "month":
-        return "2000-01";
-      case "day":
-        return "2000-01-01";
-      default:
-        return "2000-01-01";
-    }
+    return "";
   };
 
   const getDateInputMax = () => {
-    const date = new Date();
-    switch (filterType) {
-      case "year":
-        return date.getFullYear().toString();
-      case "month":
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      case "day":
-        return date.toISOString().split('T')[0];
-      default:
-        return date.toISOString().split('T')[0];
-    }
+    return "";
   };
 
   const fetchTransactions = async () => {
@@ -176,16 +157,28 @@ export default function ReportPage() {
       if (!response.ok) throw new Error("Failed to fetch transactions");
       
       const data = await response.json();
-      const filteredTransactions = filterTransactionsByDate(data.transactions);
-      setTransactions(filteredTransactions);
+      let filteredAndSortedTransactions = filterTransactionsByDate(data.transactions);
+
+      // Apply secondary sort by createdAt for transactions on the same date
+      filteredAndSortedTransactions.sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+
+        if (dateA === dateB) {
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        }
+        return dateA - dateB;
+      });
+
+      setTransactions(filteredAndSortedTransactions);
       
       if (filterType === "year") {
-        const aggregated = aggregateMonthlyTransactions(filteredTransactions);
+        const aggregated = aggregateMonthlyTransactions(filteredAndSortedTransactions);
         setAggregatedTransactions(aggregated);
         calculateRunningBalance(aggregated);
       } else {
-        setAggregatedTransactions(filteredTransactions);
-        calculateRunningBalance(filteredTransactions);
+        setAggregatedTransactions(filteredAndSortedTransactions);
+        calculateRunningBalance(filteredAndSortedTransactions);
       }
     } catch (error) {
       console.error("Error fetching transactions:", error);
@@ -245,6 +238,7 @@ export default function ReportPage() {
         amount: Math.max(data.credit, data.debit),
         type: data.credit >= data.debit ? "credit" as const : "debit" as const,
         receiptNumber: undefined,
+        createdAt: date.toISOString(),
         details: {
           credit: data.credit,
           debit: data.debit,
@@ -268,66 +262,78 @@ export default function ReportPage() {
   };
 
   const exportToExcel = () => {
-    // Create CSV content
-    const headers = ["Date", "Particulars", "Credit", "Debit", "Balance"];
+    let dataToProcess: Transaction[] = [];
+
     if (filterType === "year") {
-      headers.push("Transactions");
+      dataToProcess = [...aggregatedTransactions];
+    } else {
+      dataToProcess = [...transactions];
     }
-    
-    const rows = (filterType === "year" ? aggregatedTransactions : transactions).map((transaction, index) => {
-      const row = [
-        formatDate(transaction.date),
-        transaction.particulars,
-        filterType === "year" 
-          ? (transaction.details?.credit || 0).toFixed(2)
-          : transaction.type === "credit" ? transaction.amount.toFixed(2) : "",
-        filterType === "year"
-          ? (transaction.details?.debit || 0).toFixed(2)
-          : transaction.type === "debit" ? transaction.amount.toFixed(2) : "",
-        runningBalance[index].toFixed(2)
-      ];
-      
-      if (filterType === "year") {
-        row.push((transaction.details?.transactionCount || 0).toString());
+
+    if (dataToProcess.length === 0) {
+      alert("No transactions to export");
+      return;
+    }
+
+    // Apply sorting logic
+    dataToProcess.sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+
+      if (dateA === dateB) {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       }
-      
-      return row;
+      return dateA - dateB;
     });
 
-    // Add total row
-    const totalCredit = filterType === "year"
-      ? aggregatedTransactions.reduce((sum, t) => sum + (t.details?.credit || 0), 0)
-      : transactions.filter(t => t.type === "credit").reduce((sum, t) => sum + t.amount, 0);
-    
-    const totalDebit = filterType === "year"
-      ? aggregatedTransactions.reduce((sum, t) => sum + (t.details?.debit || 0), 0)
-      : transactions.filter(t => t.type === "debit").reduce((sum, t) => sum + t.amount, 0);
-    
-    const totalRow = [
-      "Total",
-      filterType === "year" ? "Yearly Summary" : "",
-      totalCredit.toFixed(2),
-      totalDebit.toFixed(2),
-      runningBalance[runningBalance.length - 1]?.toFixed(2) || "0.00"
-    ];
-    
-    if (filterType === "year") {
-      totalRow.push(transactions.length.toString());
-    }
+    const headers = ["Date", "Particulars", "Credit", "Debit", "Balance"];
 
-    rows.push(totalRow);
+    const csvRows = dataToProcess.map((transaction, index) => {
+      let creditAmount = "";
+      let debitAmount = "";
+      let particularsText = transaction.particulars;
+
+      if (filterType === "year") {
+        // Explicitly cast to ensure 'details' is recognized as present
+        const aggregatedTransaction = transaction as Required<Transaction>;
+        creditAmount = aggregatedTransaction.details.credit.toFixed(2);
+        debitAmount = aggregatedTransaction.details.debit.toFixed(2);
+        particularsText = `Monthly Summary - ${new Date(aggregatedTransaction.date).toLocaleString('default', { month: 'long', year: 'numeric' })}`;
+      } else {
+        if (transaction.type === "credit") {
+          creditAmount = transaction.amount.toFixed(2);
+        } else {
+          debitAmount = transaction.amount.toFixed(2);
+        }
+      }
+
+      const balanceValue = runningBalance[index] !== undefined ? runningBalance[index].toFixed(2) : "";
+
+      return [
+        `"${formatDate(transaction.date)}"`,
+        `"${particularsText}"`,
+        `"${creditAmount}"`,
+        `"${debitAmount}"`,
+        `"${balanceValue}"`,
+      ].join(",");
+    });
 
     const csvContent = [
-      headers.join(","),
-      ...rows.map(row => row.join(","))
+      headers.map((h) => `"${h.toUpperCase()}"`).join(","),
+      ...csvRows,
     ].join("\n");
 
-    // Create and download file
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const bom = "\uFEFF";
+    const blob = new Blob([bom + csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `transaction_report_${filterDate}.csv`);
+    link.setAttribute(
+      "download",
+      `report_${filterType}_${format(new Date(filterDate), 'yyyy-MM-dd')}.csv`
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
