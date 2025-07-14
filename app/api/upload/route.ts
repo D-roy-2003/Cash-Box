@@ -1,13 +1,12 @@
 // app/api/upload/route.ts
 import { NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import { createClient } from "@supabase/supabase-js";
 import { verifyJwt } from "@/lib/auth";
 
-// Define a custom error type that includes the code property
-interface ErrorWithCode extends Error {
-  code?: string;
-}
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export async function POST(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -31,69 +30,42 @@ export async function POST(request: Request) {
     const file = formData.get("file") as File;
 
     if (!file) {
-      return NextResponse.json(
-        { error: "No file uploaded" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
-
-    // Validate file type
     if (!file.type.startsWith("image/")) {
-      return NextResponse.json(
-        { error: "Only image files are allowed" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Only image files allowed" }, { status: 400 });
     }
-
-    // Validate file size (5MB max)
     if (file.size > 5 * 1024 * 1024) {
-      return NextResponse.json(
-        { error: "File size too large. Maximum 5MB allowed." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "File size too large. Max 5MB." }, { status: 400 });
     }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = new Uint8Array(arrayBuffer);
 
-    // Create unique filename using timestamp and random number
-    const ext = path.extname(file.name);
-    const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 10000);
-    const filename = `${timestamp}-${random}${ext}`;
-    const uploadDir = path.join(process.cwd(), "public", "Uploads");
-    const filePath = path.join(uploadDir, filename);
+    // Unique filename
+    const ext = file.name.split('.').pop();
+    const filename = `profile/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
-    try {
-      await writeFile(filePath, buffer);
-    } catch (err) {
-      // Type guard to check if error has a code property
-      if (isErrorWithCode(err) && err.code === 'ENOENT') {
-        // Directory doesn't exist, create it
-        await mkdir(uploadDir, { recursive: true });
-        await writeFile(filePath, buffer);
-      } else {
-        throw err;
-      }
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from("cashbox")
+      .upload(filename, buffer, { contentType: file.type });
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Return relative path that can be stored in database
-    const relativePath = `/Uploads/${filename}`;
+    // Get public URL
+    const { data: publicUrlData } = supabase.storage
+      .from("cashbox")
+      .getPublicUrl(filename);
 
     return NextResponse.json({
       success: true,
-      filePath: relativePath,
+      filePath: publicUrlData.publicUrl, // This is the Supabase public URL
     });
   } catch (error) {
     console.error("File upload error:", error);
-    return NextResponse.json(
-      { error: "Failed to upload file" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to upload file" }, { status: 500 });
   }
-}
-
-// Type guard function to check if error is of type ErrorWithCode
-function isErrorWithCode(error: unknown): error is ErrorWithCode {
-  return error instanceof Error && 'code' in error;
 }

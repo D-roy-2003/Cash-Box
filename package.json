@@ -37,6 +37,7 @@
     "@radix-ui/react-toggle": "latest",
     "@radix-ui/react-toggle-group": "latest",
     "@radix-ui/react-tooltip": "latest",
+    "@supabase/supabase-js": "^2.51.0",
     "autoprefixer": "^10.4.20",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",

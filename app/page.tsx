@@ -112,10 +112,8 @@ export default function Home() {
 
   const getProfilePhotoUrl = (profilePhoto?: string | null): string => {
     if (!profilePhoto) return "/placeholder.svg";
-    if (profilePhoto.startsWith("http")) return profilePhoto;
-    if (profilePhoto.startsWith("data:")) return profilePhoto;
-    if (profilePhoto.startsWith("/Uploads/")) return profilePhoto;
-    return `/Uploads/${profilePhoto.replace(/^\/+/, "")}`;
+    if (profilePhoto.startsWith("http") || profilePhoto.startsWith("data:")) return profilePhoto;
+    return "/placeholder.svg";
   };
 
   const handleLogout = () => {
