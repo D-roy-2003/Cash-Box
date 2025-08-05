@@ -3,10 +3,15 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifyJwt } from "@/lib/auth";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// Check if Supabase environment variables are available
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+// Only create Supabase client if environment variables are available
+let supabase: any = null;
+if (supabaseUrl && supabaseKey) {
+  supabase = createClient(supabaseUrl, supabaseKey);
+}
 
 export async function POST(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -26,6 +31,13 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Check if Supabase is configured
+    if (!supabase) {
+      return NextResponse.json({ 
+        error: "File upload service is not configured. Please contact administrator." 
+      }, { status: 503 });
+    }
+
     const formData = await request.formData();
     const file = formData.get("file") as File;
 
