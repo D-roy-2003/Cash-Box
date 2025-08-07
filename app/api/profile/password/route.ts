@@ -2,11 +2,9 @@ import { NextResponse } from "next/server";
 import { getPool } from "@/lib/database";
 import { verifyJwt } from "@/lib/auth";
 import bcrypt from "bcryptjs";
-import { initializeDatabase } from "@/lib/database";
 import mysql from "mysql2/promise";
 
 export async function PUT(request: Request) {
-  await initializeDatabase();
   const authHeader = request.headers.get("authorization");
 
   if (!authHeader?.startsWith("Bearer ")) {

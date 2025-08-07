@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
 import { getPool } from "@/lib/database";
 import { verifyJwt } from "@/lib/auth";
-import { initializeDatabase } from "@/lib/database";
 
 interface UserProfile {
   id: string | number;

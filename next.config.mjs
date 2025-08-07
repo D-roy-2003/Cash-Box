@@ -28,7 +28,7 @@ const nextConfig = {
     return config;
   },
   // Enable static exports for standalone mode if needed
-  output: 'standalone',
+  // output: 'standalone', // Disabled due to Windows symlink issues
   // Configure static file serving from /app/Uploads
   async headers() {
     return [
@@ -43,6 +43,8 @@ const nextConfig = {
       },
     ];
   },
+  // Disable static generation for pages that require database access
+  serverExternalPackages: ['mysql2'],
 }
 
 export default nextConfig
