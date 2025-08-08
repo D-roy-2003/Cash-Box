@@ -53,7 +53,7 @@ A comprehensive finance management web app built with Next.js 15, TypeScript, Ta
    npm install
    ```
    
-   **Troubleshooting**: If installation fails, try:
+   **Troubleshooting**: If installation fails or shows error try:
    ```bash
    # Force install with pnpm
    pnpm install --force
